@@ -24,6 +24,13 @@ interface ChatMsg {
     analysisData?: any;
     playgroundUrl?: string;
   };
+  presentationData?: {
+    taskId: string;
+    presentationId?: string;
+    editUrl?: string;
+    downloadUrl?: string;
+    topic: string;
+  };
   suggestions?: any[];
   followUpQuestions?: string[];
 }
@@ -144,6 +151,25 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
 
+  // Uploaded datasets (per-conversation, for DataViz routing)
+  const [uploadedDatasets, setUploadedDatasets] = useState<{ dataset_id: string; filename: string; row_count: number; columns?: any[] }[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Helper: persist datasets to localStorage keyed by conversation ID
+  const persistDatasets = (convId: string, datasets: typeof uploadedDatasets) => {
+    if (datasets.length > 0) {
+      localStorage.setItem(`prism_datasets_${convId}`, JSON.stringify(datasets));
+    } else {
+      localStorage.removeItem(`prism_datasets_${convId}`);
+    }
+  };
+  const loadPersistedDatasets = (convId: string) => {
+    try {
+      const stored = localStorage.getItem(`prism_datasets_${convId}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  };
+
   // UI States
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -211,6 +237,9 @@ export default function ChatPage() {
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const abortRef = useRef<{ abort: () => void } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; content: string } | null>(null);
 
   // Load initial
   useEffect(() => {
@@ -266,15 +295,15 @@ export default function ChatPage() {
     }
   };
 
-  const createNewChat = async () => {
-    const conv = await api.createConversation({ title: 'New chat' });
-    setConversations(prev => [conv, ...prev]);
-    setActiveConvId(conv.id);
+  const createNewChat = () => {
+    setActiveConvId(null);
     setMessages([]);
     setAttachments([]);
+    setUploadedDatasets([]);
     setCanvasArtifacts([]);
     setIsCanvasOpen(false);
-    localStorage.setItem('prism_active_conv', conv.id);
+    setIsAgentPanelOpen(false);
+    localStorage.removeItem('prism_active_conv');
   };
 
   const selectConversation = async (convId: string) => {
@@ -285,6 +314,10 @@ export default function ChatPage() {
       setMessages((detail.messages || []).map(m => ({ ...m })));
       setCanvasArtifacts([]);
       setIsCanvasOpen(false);
+      setAgentPanel(null);
+      setIsAgentPanelOpen(false);
+      // Restore persisted datasets for this conversation
+      setUploadedDatasets(loadPersistedDatasets(convId));
     } catch (err) {
       console.error('Failed to load session:', err);
     }
@@ -338,30 +371,135 @@ export default function ChatPage() {
   const removeAttachment = (id: string) => { setAttachments(prev => prev.filter(a => a.id !== id)); };
 
   // ── Send Message ──
+  const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.html', '.md', '.json', '.txt'];
+  const MAX_FILE_SIZE_MB = 50;
+
   const sendMessage = async (overrideMessage?: string) => {
     const userMessage = (overrideMessage || input).trim();
-    if (!userMessage || isStreaming) return;
+    const hasFiles = attachments.length > 0;
+    if ((!userMessage && !hasFiles) || isStreaming) return;
 
     const isCanvasCommand = userMessage.startsWith('/canvas ');
     const strippedMessage = isCanvasCommand ? userMessage.replace('/canvas ', '') : userMessage;
 
+    const currentAttachments = [...attachments];
     setInput('');
     setAttachments([]);
     setSlashMenuOpen(false);
 
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    // Show user message (include file names if attached)
+    const fileLabel = currentAttachments.length > 0
+      ? `\n\n📎 _Attached: ${currentAttachments.map(a => a.filename).join(', ')}_`
+      : '';
+    setMessages(prev => [...prev, { role: 'user', content: (userMessage || 'Uploaded files') + fileLabel }]);
 
     let convId = activeConvId;
     if (!convId) {
-      const conv = await api.createConversation({ title: userMessage.slice(0, 50) });
+      const conv = await api.createConversation({ title: (userMessage || 'Data Analysis').slice(0, 50) });
       convId = conv.id;
       setActiveConvId(conv.id);
       setConversations(prev => [conv, ...prev]);
     } else if (messages.length === 0) {
-      // Auto-rename 'New chat' based on the first real message sent
-      const newTitle = userMessage.slice(0, 50);
+      const newTitle = (userMessage || 'Data Analysis').slice(0, 50);
       api.updateConversation(convId, { title: newTitle }).catch(console.error);
       setConversations(prev => prev.map(c => c.id === convId ? { ...c, title: newTitle } : c));
+    }
+
+    // ── File Upload Flow ──
+    let activeDatasetIds = uploadedDatasets.map(d => d.dataset_id);
+
+    if (currentAttachments.length > 0) {
+      // Validate files client-side
+      const validFiles: File[] = [];
+      const clientErrors: string[] = [];
+      for (const att of currentAttachments) {
+        const ext = '.' + att.filename.split('.').pop()?.toLowerCase();
+        if (!ALLOWED_EXTENSIONS.includes(ext)) {
+          clientErrors.push(`${att.filename}: Unsupported format (${ext}). Allowed: ${ALLOWED_EXTENSIONS.join(', ')}`);
+          continue;
+        }
+        if (att.file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+          clientErrors.push(`${att.filename}: File too large (${(att.file.size / 1024 / 1024).toFixed(1)}MB). Max: ${MAX_FILE_SIZE_MB}MB`);
+          continue;
+        }
+        validFiles.push(att.file);
+      }
+
+      if (clientErrors.length > 0 && validFiles.length === 0) {
+        // All files failed validation
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `⚠️ **Upload failed:**\n\n${clientErrors.map(e => `- ${e}`).join('\n')}`,
+          model_used: 'PRISM Agent',
+        }]);
+        return;
+      }
+
+      // Upload files
+      setIsUploading(true);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `📤 Uploading ${validFiles.length} file(s)...`,
+        isStreaming: true,
+        agentStatus: 'Uploading files to Data Engine...',
+      }]);
+
+      const uploadResult = await api.uploadFiles(validFiles);
+      setIsUploading(false);
+
+      if (uploadResult.error) {
+        // Upload failed
+        setMessages(prev => {
+          const updated = [...prev];
+          if (updated[updated.length - 1]?.isStreaming) updated.pop();
+          updated.push({
+            role: 'assistant',
+            content: `⚠️ **Upload failed:** ${uploadResult.error}${clientErrors.length > 0 ? '\n\n**Validation warnings:**\n' + clientErrors.map(e => `- ${e}`).join('\n') : ''}`,
+            model_used: 'PRISM Agent',
+          });
+          return updated;
+        });
+        return;
+      }
+
+      // Upload successful — store datasets
+      const newDatasets = (uploadResult.datasets || []).map((ds: any) => ({
+        dataset_id: ds.dataset_id,
+        filename: ds.filename,
+        row_count: ds.row_count || 0,
+        columns: ds.columns,
+      }));
+      const mergedDatasets = [...uploadedDatasets, ...newDatasets];
+      setUploadedDatasets(mergedDatasets);
+      // Persist to localStorage so datasets survive navigation
+      if (convId) persistDatasets(convId, mergedDatasets);
+      activeDatasetIds = [...activeDatasetIds, ...(uploadResult.dataset_ids || [])];
+
+      // Build upload success message
+      const dsInfo = newDatasets.map((ds: any) =>
+        `📁 **${ds.filename}** — ${ds.row_count} rows, ${ds.columns?.length || '?'} columns`
+      ).join('\n');
+      const warningText = (uploadResult.warnings?.length || clientErrors.length)
+        ? `\n\n⚠️ Warnings: ${[...(uploadResult.warnings || []), ...clientErrors].join('; ')}`
+        : '';
+
+      setMessages(prev => {
+        const updated = [...prev];
+        if (updated[updated.length - 1]?.isStreaming) updated.pop();
+        updated.push({
+          role: 'assistant',
+          content: `✅ **Files uploaded successfully!**\n\n${dsInfo}${warningText}\n\n_You can now ask any question about this data — I can create charts, run analysis, or answer questions._`,
+          model_used: 'PRISM Agent',
+        });
+        api.saveMessages(convId!, updated.filter(m => !m.isStreaming));
+        return updated;
+      });
+
+      // If no text message, just uploaded files — stop here
+      if (!userMessage) {
+        loadConversations();
+        return;
+      }
     }
 
     setIsStreaming(true);
@@ -369,7 +507,9 @@ export default function ChatPage() {
       role: 'assistant', 
       content: '', 
       isStreaming: true,
-      agentStatus: 'Analyzing query & searching knowledge base...' 
+      agentStatus: activeDatasetIds.length > 0 
+        ? 'Querying your uploaded data...' 
+        : 'Analyzing query & searching knowledge base...' 
     }]);
 
     let completeResponse = '';
@@ -578,7 +718,15 @@ export default function ChatPage() {
           return updated;
         });
       }
-    }, useWebSearch);
+    }, useWebSearch,
+    // Send conversation history for context-based visualization (/api/text fallback)
+    messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .filter(m => m.content && !m.isStreaming)
+      .map(m => ({ role: m.role, content: m.content })),
+    // Send uploaded dataset IDs for DataViz routing
+    activeDatasetIds.length > 0 ? activeDatasetIds : undefined
+    );
   };
 
   const copyMessage = (content: string, idx: number) => {
@@ -691,11 +839,25 @@ export default function ChatPage() {
             // Update the tool-call message
             setMessages(prev => {
               const updated = [...prev];
-              const toolMsg = updated.findIndex(m => m.content.startsWith('🔧'));
+              // Search backwards to find the most recent generating message
+              let toolMsg = -1;
+              for (let i = updated.length - 1; i >= 0; i--) {
+                if (updated[i].content.startsWith('🔧')) {
+                  toolMsg = i;
+                  break;
+                }
+              }
               if (toolMsg >= 0) {
                 updated[toolMsg] = {
                   ...updated[toolMsg],
                   content: `✅ **Presentation created: "${toolData.topic || 'Conversation Summary'}"**\n\n_${toolData.n_slides} slides generated. Open the panel on the right to view and edit._`,
+                  presentationData: {
+                    taskId,
+                    presentationId: status.presentation_id,
+                    editUrl: status.edit_url,
+                    downloadUrl: status.download_url,
+                    topic: toolData.topic || 'Conversation Summary',
+                  }
                 };
               }
               api.saveMessages(convId, updated.filter(m => !m.isStreaming));
@@ -725,12 +887,38 @@ export default function ChatPage() {
   };
 
   const handleManualPresentation = (content: string) => {
+    if (agentPanel?.status === 'generating') {
+      alert('A task is already running in the background. Please wait for it to complete.');
+      return;
+    }
+    
+    // Open custom confirmation modal instead of native window.confirm
+    setConfirmModal({ isOpen: true, content });
+  };
+
+  const proceedWithPresentation = () => {
+    if (!confirmModal) return;
+    const { content } = confirmModal;
+    setConfirmModal(null);
+
     const toolData: ToolCallData = {
       tool: 'presentation',
       topic: content.slice(0, 200),
       use_chat_context: false,
       n_slides: 6,
     };
+
+    setMessages(prev => {
+      const updated = [...prev];
+      updated.push({
+        role: 'assistant',
+        content: `🔧 **Creating presentation: "${toolData.topic}"...**\n\n_PRISM Agent is generating ${toolData.n_slides} slides from selected text. The editor will open in the panel._`,
+        model_used: 'PRISM Agent',
+      });
+      if (activeConvId) api.saveMessages(activeConvId, updated.filter(m => !m.isStreaming));
+      return updated;
+    });
+
     handlePresentationGeneration(toolData, activeConvId || '');
   };
 
@@ -1127,9 +1315,11 @@ export default function ChatPage() {
                           <button onClick={() => copyMessage(msg.content, idx)} title="Copy">
                             {copiedMsgIdx === idx ? '✓' : <CopyIcon />}
                           </button>
-                          <button onClick={regenerateMessage} title="Regenerate"><RefreshIcon /></button>
+                          {idx === messages.length - 1 && <button onClick={regenerateMessage} title="Regenerate"><RefreshIcon /></button>}
                           <button onClick={() => pinToCanvas(msg.content)} title="Pin to Canvas"><PinIcon /></button>
-                          <button onClick={() => handleManualPresentation(msg.content)} title="Create Presentation"><SlidesIcon /></button>
+                          {idx === messages.length - 1 && !msg.presentationData && (
+                            <button onClick={() => handleManualPresentation(msg.content)} title="Create Presentation"><SlidesIcon /></button>
+                          )}
                           {msg.vizData && (
                             <button onClick={() => {
                               setAgentPanel({
@@ -1148,6 +1338,23 @@ export default function ChatPage() {
                               <ChartBarIcon /> View Chart
                             </button>
                           )}
+                          {msg.presentationData && (
+                            <button onClick={() => {
+                              setAgentPanel({
+                                type: 'presentation',
+                                status: 'ready',
+                                taskId: msg.presentationData!.taskId,
+                                presentationId: msg.presentationData!.presentationId,
+                                editUrl: msg.presentationData!.editUrl,
+                                downloadUrl: msg.presentationData!.downloadUrl,
+                                topic: msg.presentationData!.topic,
+                              });
+                              setIsAgentPanelOpen(true);
+                              setIsCanvasOpen(false);
+                            }} title="View Presentation" className="viz-view-btn" style={{ marginLeft: '6px' }}>
+                              <SlidesIcon /> View Slides
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1164,8 +1371,8 @@ export default function ChatPage() {
               <div className="canvas-headerTabs">
                 <div className="canvas-tabs-scroll">
                   {/* Agent Panel Tab */}
-                  {agentPanel && (
-                    <div className={`canvas-tab ${!isCanvasOpen || agentPanel ? 'active' : ''}`} onClick={() => { setIsCanvasOpen(false); }}>
+                  {(agentPanel && isAgentPanelOpen) && (
+                    <div className={`canvas-tab ${!isCanvasOpen ? 'active' : ''}`} onClick={() => { setIsCanvasOpen(false); }}>
                       <span className="tab-icon">{agentPanel.type === 'visualizer' ? '📊' : '🔧'}</span>
                       {agentPanel.type === 'presentation' ? 'Presentation' : agentPanel.type === 'visualizer' ? 'Visualizer' : 'Tool'}
                       {agentPanel.status === 'generating' && <span className="agent-pulse"></span>}
@@ -1173,19 +1380,19 @@ export default function ChatPage() {
                   )}
                   {/* Canvas Tabs */}
                   {canvasArtifacts.map(art => (
-                    <div key={art.id} className={`canvas-tab ${!agentPanel && activeCanvasTabId === art.id ? 'active' : ''}`} onClick={() => { setActiveCanvasTabId(art.id); setIsCanvasOpen(true); }}>
+                    <div key={art.id} className={`canvas-tab ${isCanvasOpen && activeCanvasTabId === art.id ? 'active' : ''}`} onClick={() => { setActiveCanvasTabId(art.id); setIsCanvasOpen(true); }}>
                       <span className="tab-icon">{art.type === 'code' ? '</>' : art.type === 'table' ? '📊' : '📝'}</span>
                       {art.title}
                       <button className="tab-close" onClick={(e) => closeCanvasTab(art.id, e)}>✕</button>
                     </div>
                   ))}
-                  {!agentPanel && canvasArtifacts.length === 0 && <div className="canvas-tab active">Analyzer</div>}
+                  {(!agentPanel || !isAgentPanelOpen) && canvasArtifacts.length === 0 && <div className="canvas-tab active">Analyzer</div>}
                 </div>
                 <button className="input-tool-btn" onClick={() => { setIsCanvasOpen(false); closeAgentPanel(); }} style={{ width: '28px', height: '28px', flexShrink: 0 }}>✕</button>
               </div>
               <div className="canvas-body">
-                {/* Agent Panel Content */}
-                {agentPanel ? (
+                {/* Panel Content Logic */}
+                {(!isCanvasOpen && agentPanel && isAgentPanelOpen) ? (
                   <div className="agent-panel-content">
                     {agentPanel.status === 'generating' && agentPanel.type === 'presentation' && (
                       <div className="agent-progress">
@@ -1299,7 +1506,7 @@ export default function ChatPage() {
                       </div>
                     )}
                   </div>
-                ) : canvasArtifacts.length > 0 && activeCanvasTabId ? (
+                ) : (isCanvasOpen && canvasArtifacts.length > 0 && activeCanvasTabId) ? (
                   <div className="markdown-prose">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {canvasArtifacts.find(a => a.id === activeCanvasTabId)?.content || ''}
@@ -1338,6 +1545,34 @@ export default function ChatPage() {
             )}
 
             <div className="input-box">
+              {/* Active Dataset Chips */}
+              {uploadedDatasets.length > 0 && (
+                <div className="dataset-chips">
+                  <span className="dataset-chips-label">📊 Active datasets:</span>
+                  {uploadedDatasets.map(ds => (
+                    <div key={ds.dataset_id} className="dataset-chip">
+                      <span className="dataset-chip-icon">📁</span>
+                      <span className="dataset-chip-name">{ds.filename}</span>
+                      <span className="dataset-chip-meta">{ds.row_count} rows</span>
+                      <button className="dataset-chip-remove" onClick={() => {
+                        const updated = uploadedDatasets.filter(d => d.dataset_id !== ds.dataset_id);
+                        setUploadedDatasets(updated);
+                        if (activeConvId) persistDatasets(activeConvId, updated);
+                        api.deleteDataset(ds.dataset_id).catch(console.error);
+                      }} title="Remove dataset">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Upload Progress */}
+              {isUploading && (
+                <div className="upload-progress-bar">
+                  <div className="upload-progress-fill" />
+                  <span>Uploading files...</span>
+                </div>
+              )}
+
               {/* Attachments Preview */}
               {attachments.length > 0 && (
                 <div className="attachment-previews">
@@ -1395,6 +1630,28 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
+        
+        {/* ── Custom Confirmation Modal ── */}
+        {confirmModal?.isOpen && (
+          <div className="custom-modal-overlay" onClick={() => setConfirmModal(null)}>
+            <div className="custom-modal" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <div className="modal-icon">
+                  <SlidesIcon />
+                </div>
+                <h3>Create Presentation?</h3>
+              </div>
+              <div className="modal-body">
+                <p>Do you want PRISM to generate a professional slide deck based on this specific response?</p>
+                <p className="modal-disclaimer">This process uses advanced reasoning and may take 15-30 seconds to complete.</p>
+              </div>
+              <div className="modal-footer">
+                <button className="modal-btn-secondary" onClick={() => setConfirmModal(null)}>Cancel</button>
+                <button className="modal-btn-primary" onClick={proceedWithPresentation}>Generate Slides</button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

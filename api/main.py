@@ -22,7 +22,7 @@ import sys
 import time
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -55,9 +55,16 @@ from api.tools.presentation import (
 from api.tools.visualizer import (
     detect_visualizer_intent,
     chat_visualizer,
+    text_visualizer,
+    extract_conversation_text,
+    chat_has_chartable_data,
     list_datasets as viz_list_datasets,
     match_datasets_from_context,
     get_playground_url,
+    upload_files as viz_upload_files,
+    delete_dataset as viz_delete_dataset,
+    ALLOWED_EXTENSIONS,
+    MAX_FILE_SIZE_MB,
 )
 
 
@@ -264,8 +271,97 @@ def ask_question(req: AskRequest):
     - COMPARISON → multi-company RAG
     - AMBIGUOUS → return clarification suggestions
     """
-    print(f"\n[ASK] Question: '{req.question}' | nse_code: '{req.nse_code}' | stream: {req.stream}")
-    
+    print(f"\n[ASK] Question: '{req.question}' | nse_code: '{req.nse_code}' | stream: {req.stream} | dataset_ids: {req.dataset_ids}")
+
+    # ══════════════════════════════════════════════════════════════════
+    # PRIORITY 0: If dataset_ids are present, route EVERYTHING through DataViz
+    # This handles all file-upload scenarios — chart, query, clarify
+    # ══════════════════════════════════════════════════════════════════
+    if req.dataset_ids and len(req.dataset_ids) > 0:
+        print(f"[ASK] Dataset IDs present ({req.dataset_ids}) — routing through DataViz API")
+
+        if req.stream:
+            def dataset_viz_stream():
+                import time
+                topic = req.question
+                yield f"event: viz_status\ndata: {json.dumps('Processing your data question...')}\n\n"
+                time.sleep(0.2)
+                yield f"event: viz_status\ndata: {json.dumps('Querying uploaded datasets...')}\n\n"
+
+                viz_result = chat_visualizer(req.question, req.dataset_ids)
+                intent = viz_result.get("intent", "query")
+                print(f"[ASK/DATASET] DataViz response intent: {intent}")
+
+                if intent == "chart" and viz_result.get("chart"):
+                    # Chart response → open in Agent Panel (two-phase: generating → ready)
+                    # Phase 1: Init agent panel
+                    init_data = json.dumps({
+                        "tool": "visualizer",
+                        "status": "generating",
+                        "topic": topic,
+                        "chart_type_hint": viz_result.get("chart_type", "bar"),
+                    })
+                    yield f"event: tool_call\ndata: {init_data}\n\n"
+                    yield f"event: viz_status\ndata: {json.dumps('Rendering visualization...')}\n\n"
+                    time.sleep(0.3)
+                    final_data = json.dumps({
+                        "tool": "visualizer",
+                        "status": "ready",
+                        "topic": topic,
+                        "chart_type_hint": viz_result.get("chart_type", "bar"),
+                        "viz_intent": "chart",
+                        "viz_message": viz_result.get("message", ""),
+                        "chart": viz_result.get("chart"),
+                        "chart_type": viz_result.get("chart_type"),
+                        "chart_config": viz_result.get("chart_config"),
+                        "analysis": viz_result.get("analysis"),
+                        "data": viz_result.get("data"),
+                        "datasets_used": viz_result.get("datasets_used", req.dataset_ids),
+                        "playground_url": get_playground_url(),
+                    })
+                    yield f"event: tool_call\ndata: {final_data}\n\n"
+                elif intent == "clarify":
+                    # Clarification needed (e.g. pick a dataset column)
+                    msg = viz_result.get("message", "Could you clarify your question?")
+                    options = viz_result.get("options", [])
+                    if options:
+                        msg += "\n\n**Available options:**\n"
+                        for opt in options:
+                            if isinstance(opt, dict):
+                                msg += f"- {opt.get('filename', opt.get('dataset_id', '?'))}\n"
+                            else:
+                                msg += f"- {opt}\n"
+                    yield f"event: token\ndata: {json.dumps(msg)}\n\n"
+                elif intent == "error":
+                    err_msg = viz_result.get("message", "Something went wrong while analyzing your data.")
+                    yield f"event: token\ndata: {json.dumps(err_msg)}\n\n"
+                else:
+                    # Query response — return as text (may include data table)
+                    msg = viz_result.get("message", "")
+                    data = viz_result.get("data")
+                    if data and isinstance(data, list) and len(data) > 0:
+                        # Format tabular data as markdown table
+                        headers = list(data[0].keys())
+                        table = "\n\n| " + " | ".join(headers) + " |\n"
+                        table += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+                        for row in data[:50]:  # cap at 50 rows
+                            table += "| " + " | ".join([str(row.get(h, "")) for h in headers]) + " |\n"
+                        msg += table
+                    elif data and isinstance(data, dict):
+                        msg += "\n\n```json\n" + json.dumps(data, indent=2) + "\n```"
+                    yield f"event: token\ndata: {json.dumps(msg)}\n\n"
+
+                yield f"event: done\ndata: {json.dumps({'model_used': 'PRISM Data Agent'})}\n\n"
+
+            return StreamingResponse(
+                dataset_viz_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+            )
+        else:
+            viz_result = chat_visualizer(req.question, req.dataset_ids)
+            return JSONResponse(content=viz_result)
+
     # ── Tool-Use Intent Detection (before RAG) ──
     # 1. Check presentation intent
     tool_intent = detect_presentation_intent(req.question)
@@ -304,15 +400,184 @@ def ask_question(req: AskRequest):
 
                 if dataset_ids is None:
                     all_datasets = viz_list_datasets()
+
+                    # ── Helper: Run RAG-to-Chart pipeline (compound query) ──
+                    def _try_rag_then_chart():
+                        """
+                        For compound queries like 'What is Infosys revenue? chart it'
+                        in a single message — run RAG first to get data, then chart.
+                        """
+                        # Strip chart keywords to extract the data question
+                        import re as _re
+                        data_question = _re.sub(
+                            r'(?:please\s+)?(?:plot|chart|graph|visuali[sz]e|draw|show|create|make|generate|build)'
+                            r'(?:\s+(?:a|an|the|this|that|me|it))?'
+                            r'(?:\s+(?:bar|line|pie|scatter|area|histogram|heatmap|donut|funnel|waterfall|treemap|bubble|radar|chart|graph|plot|visualization))*'
+                            r'(?:\s+(?:of|for|from|on|with|using|about))?'
+                            r'(?:\s+(?:this|that|the|above|my|it|data|information|numbers|results|data))?'
+                            r'(?:\s*(?:please|pls))?',
+                            '', req.question, flags=_re.IGNORECASE
+                        ).strip()
+                        
+                        # Force RAG to return structured data
+                        table_prompt = f"{data_question}. Provide the raw data ONLY in a markdown table format without conversational padding."
+                        
+                        # If after stripping chart words, we still have a real question
+                        if len(data_question) > 5:
+                            from api.database import get_db
+                            from api.rag import ask as rag_ask
+                            try:
+                                with get_db() as conn:
+                                    rag_answer, rag_citations, _ = rag_ask(
+                                        conn, table_prompt,
+                                        company_ticker=req.nse_code or None,
+                                        max_chunks=max(3, req.max_context_chunks),
+                                        stream=False,
+                                        use_web_search=req.use_web_search
+                                    )
+                                if rag_answer and len(rag_answer) > 20:
+                                    return rag_answer
+                            except Exception as e:
+                                print(f"[VIZ] RAG-to-Chart query failed: {e}")
+                        return None
+
+                    # ── Determine if we have chartable data in chat history ──
+                    has_prior_data = req.chat_history and chat_has_chartable_data(req.chat_history)
+
                     if not all_datasets:
+                        # ── /api/text FALLBACK: extract data from conversation ──
+                        if has_prior_data:
+                            yield f"event: viz_status\ndata: {json.dumps('Extracting data from conversation...')}\n\n"
+                            conv_text = extract_conversation_text(req.chat_history)
+                            if conv_text.strip():
+                                yield f"event: viz_status\ndata: {json.dumps('Generating chart from conversation data...')}\n\n"
+                                viz_result = text_visualizer(conv_text, viz_intent["message"])
+
+                                if viz_result.get("intent") != "error":
+                                    yield f"event: viz_status\ndata: {json.dumps('Rendering visualization...')}\n\n"
+                                    time.sleep(0.2)
+                                    final_data = json.dumps({
+                                        "tool": "visualizer",
+                                        "status": "ready",
+                                        "topic": topic,
+                                        "chart_type_hint": chart_type_hint,
+                                        "viz_intent": viz_result.get("intent", "chart"),
+                                        "viz_message": viz_result.get("message", ""),
+                                        "chart": viz_result.get("chart"),
+                                        "chart_type": viz_result.get("chart_type"),
+                                        "chart_config": viz_result.get("chart_config"),
+                                        "analysis": viz_result.get("analysis"),
+                                        "data": viz_result.get("data"),
+                                        "datasets_used": [],
+                                        "playground_url": get_playground_url(),
+                                    })
+                                    yield f"event: tool_call\ndata: {final_data}\n\n"
+                                    yield "event: done\ndata: {}\n\n"
+                                    return
+
+                        # ── RAG-TO-CHART: Compound query ──
+                        yield f"event: viz_status\ndata: {json.dumps('Searching knowledge base for data...')}\n\n"
+                        rag_data = _try_rag_then_chart()
+                        if rag_data:
+                            yield f"event: viz_status\ndata: {json.dumps('Data retrieved — generating chart...')}\n\n"
+                            viz_result = text_visualizer(rag_data, viz_intent["message"])
+                            if viz_result.get("intent") != "error":
+                                yield f"event: viz_status\ndata: {json.dumps('Rendering visualization...')}\n\n"
+                                time.sleep(0.2)
+                                
+                                # Append RAG data context for the UI
+                                augmented_message = viz_result.get("message", "")
+                                augmented_message += f"\n\n**Data retrieved from knowledge base:**\n\n{rag_data}"                                
+                                
+                                final_data = json.dumps({
+                                    "tool": "visualizer",
+                                    "status": "ready",
+                                    "topic": topic,
+                                    "chart_type_hint": chart_type_hint,
+                                    "viz_intent": viz_result.get("intent", "chart"),
+                                    "viz_message": augmented_message,
+                                    "chart": viz_result.get("chart"),
+                                    "chart_type": viz_result.get("chart_type"),
+                                    "chart_config": viz_result.get("chart_config"),
+                                    "analysis": viz_result.get("analysis"),
+                                    "data": viz_result.get("data"),
+                                    "datasets_used": [],
+                                    "playground_url": get_playground_url(),
+                                })
+                                yield f"event: tool_call\ndata: {final_data}\n\n"
+                                yield "event: done\ndata: {}\n\n"
+                                return
+
+                        # No chat history and no datasets — show upload prompt
                         yield f"event: viz_status\ndata: {json.dumps('No datasets found')}\n\n"
-                        clarify_msg = "📊 I'd love to create that visualization! However, no datasets are currently uploaded to the Data Playground. Please upload a CSV or Excel file first via the Data Playground, then ask me again."
+                        clarify_msg = "📊 I'd love to create that visualization! However, no datasets are currently uploaded to the Data Playground and there's no data in our conversation to chart. Please either:\n\n1. Ask me a data question first (e.g., 'What is Infosys revenue?'), then say 'chart that'\n2. Upload a CSV or Excel file via the Data Playground"
                         error_data = json.dumps({"tool": "visualizer", "status": "error", "error": clarify_msg})
                         yield f"event: tool_call\ndata: {error_data}\n\n"
                         yield "event: done\ndata: {}\n\n"
                         return
                     else:
-                        # Ask for clarification
+                        # ── Multiple datasets exist but couldn't auto-match ──
+                        # Try /api/text with conversation data if available
+                        if has_prior_data:
+                            conv_text = extract_conversation_text(req.chat_history)
+                            if conv_text.strip():
+                                yield f"event: viz_status\ndata: {json.dumps('Using conversation data for chart...')}\n\n"
+                                viz_result = text_visualizer(conv_text, viz_intent["message"])
+                                if viz_result.get("intent") != "error":
+                                    yield f"event: viz_status\ndata: {json.dumps('Rendering visualization...')}\n\n"
+                                    time.sleep(0.2)
+                                    final_data = json.dumps({
+                                        "tool": "visualizer",
+                                        "status": "ready",
+                                        "topic": topic,
+                                        "chart_type_hint": chart_type_hint,
+                                        "viz_intent": viz_result.get("intent", "chart"),
+                                        "viz_message": viz_result.get("message", ""),
+                                        "chart": viz_result.get("chart"),
+                                        "chart_type": viz_result.get("chart_type"),
+                                        "chart_config": viz_result.get("chart_config"),
+                                        "analysis": viz_result.get("analysis"),
+                                        "data": viz_result.get("data"),
+                                        "datasets_used": [],
+                                        "playground_url": get_playground_url(),
+                                    })
+                                    yield f"event: tool_call\ndata: {final_data}\n\n"
+                                    yield "event: done\ndata: {}\n\n"
+                                    return
+                        # Try RAG-to-chart compound query
+                        yield f"event: viz_status\ndata: {json.dumps('Searching knowledge base for data...')}\n\n"
+                        rag_data = _try_rag_then_chart()
+                        if rag_data:
+                            yield f"event: viz_status\ndata: {json.dumps('Data retrieved — generating chart...')}\n\n"
+                            viz_result = text_visualizer(rag_data, viz_intent["message"])
+                            if viz_result.get("intent") != "error":
+                                yield f"event: viz_status\ndata: {json.dumps('Rendering visualization...')}\n\n"
+                                time.sleep(0.2)
+                                
+                                # Append RAG data context for the UI
+                                augmented_message = viz_result.get("message", "")
+                                augmented_message += f"\n\n**Data retrieved from knowledge base:**\n\n{rag_data}"
+                                
+                                final_data = json.dumps({
+                                    "tool": "visualizer",
+                                    "status": "ready",
+                                    "topic": topic,
+                                    "chart_type_hint": chart_type_hint,
+                                    "viz_intent": viz_result.get("intent", "chart"),
+                                    "viz_message": augmented_message,
+                                    "chart": viz_result.get("chart"),
+                                    "chart_type": viz_result.get("chart_type"),
+                                    "chart_config": viz_result.get("chart_config"),
+                                    "analysis": viz_result.get("analysis"),
+                                    "data": viz_result.get("data"),
+                                    "datasets_used": [],
+                                    "playground_url": get_playground_url(),
+                                })
+                                yield f"event: tool_call\ndata: {final_data}\n\n"
+                                yield "event: done\ndata: {}\n\n"
+                                return
+
+                        # Ask for dataset clarification
                         ds_list = "\\n".join([f"- **{ds.get('filename', 'Unknown')}** ({ds.get('row_count', '?')} rows)" for ds in all_datasets])
                         clarify_msg = f"📊 I can create that visualization! But I'm not sure which dataset to use. Here are the datasets available in the Data Playground:\\n\\n{ds_list}\\n\\nPlease specify which dataset you'd like me to visualize, or mention a company name so I can match it automatically."
                         error_data = json.dumps({"tool": "visualizer", "status": "error", "error": clarify_msg})
@@ -853,6 +1118,60 @@ async def visualize_data(req: VisualizerChatRequest):
     """
     result = chat_visualizer(req.message, req.dataset_ids)
     result["playground_url"] = get_playground_url()
+    return result
+
+
+@app.post("/api/v1/upload", tags=["Data Visualizer"])
+async def upload_data_files(files: list[UploadFile] = File(...)):
+    """
+    Upload CSV/Excel/JSON/MD/HTML/TXT files for data visualization.
+    Proxies to the DataViz API and returns dataset_ids for future queries.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
+    # Validate files before proxying
+    file_tuples = []
+    errors = []
+    for f in files:
+        # Extension check
+        ext = os.path.splitext(f.filename or "")[1].lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            errors.append(f"{f.filename}: Unsupported file type '{ext}'. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+            continue
+
+        # Read bytes
+        content = await f.read()
+
+        # Size check
+        size_mb = len(content) / (1024 * 1024)
+        if size_mb > MAX_FILE_SIZE_MB:
+            errors.append(f"{f.filename}: File too large ({size_mb:.1f}MB). Max: {MAX_FILE_SIZE_MB}MB")
+            continue
+
+        file_tuples.append((f.filename, content, f.content_type or "application/octet-stream"))
+
+    if not file_tuples:
+        raise HTTPException(status_code=400, detail={"message": "All uploads failed validation", "errors": errors})
+
+    result = viz_upload_files(file_tuples)
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail={"message": result["error"], "errors": errors})
+
+    # Append any validation warnings
+    if errors:
+        result["warnings"] = errors
+
+    return result
+
+
+@app.delete("/api/v1/dataset/{dataset_id}", tags=["Data Visualizer"])
+async def delete_viz_dataset(dataset_id: str):
+    """Delete an uploaded dataset from the Data Visualization API."""
+    result = viz_delete_dataset(dataset_id)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
     return result
 
 

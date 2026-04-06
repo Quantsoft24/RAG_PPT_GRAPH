@@ -47,6 +47,8 @@ class AskRequest(BaseModel):
     max_context_chunks: int = Field(5, ge=1, le=20, description="Max chunks for RAG context")
     stream: bool = Field(True, description="Stream response via SSE")
     use_web_search: bool = Field(False, description="Augment RAG with live Tavily Web Search")
+    chat_history: Optional[List[dict]] = Field(None, description="Conversation history for context-based visualization")
+    dataset_ids: Optional[List[str]] = Field(None, description="Uploaded dataset IDs for DataViz routing")
 
 
 # =============================================================================

@@ -114,8 +114,84 @@ def detect_visualizer_intent(question: str) -> Optional[Dict[str, Any]]:
 
 
 # ─────────────────────────────────────────────────────────────────
-# DATASET MANAGEMENT
+# FILE UPLOAD & DATASET MANAGEMENT
 # ─────────────────────────────────────────────────────────────────
+
+# Allowed extensions for client-side validation
+ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".html", ".md", ".json", ".txt"}
+MAX_FILE_SIZE_MB = 50
+
+
+def upload_files(file_tuples: list) -> dict:
+    """
+    Proxy file upload to DataViz API POST /api/upload.
+    
+    Args:
+        file_tuples: List of (filename, file_bytes, content_type) tuples
+    
+    Returns:
+        { dataset_ids, datasets, message } on success
+        { error: str } on failure
+    """
+    try:
+        import uuid
+        boundary = f"----PRISMBoundary{uuid.uuid4().hex}"
+        url = f"{DATA_VIZ_BASE_URL}/api/upload"
+        
+        # Build multipart/form-data body manually
+        body_parts = []
+        for filename, file_bytes, content_type in file_tuples:
+            body_parts.append(
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="files"; filename="{filename}"\r\n'
+                f"Content-Type: {content_type}\r\n\r\n"
+            )
+            body_parts.append(file_bytes)
+            body_parts.append(b"\r\n")
+        body_parts.append(f"--{boundary}--\r\n")
+        
+        # Combine string and bytes parts
+        body = b""
+        for part in body_parts:
+            if isinstance(part, str):
+                body += part.encode("utf-8")
+            else:
+                body += part
+        
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read())
+            print(f"[VISUALIZER] Upload success: {result.get('message')}, dataset_ids: {result.get('dataset_ids')}")
+            return result
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode() if e.fp else str(e)
+        print(f"[VISUALIZER] Upload HTTP Error {e.code}: {error_body}")
+        try:
+            detail = json.loads(error_body)
+            return {"error": detail.get("detail", {}).get("message", error_body)}
+        except Exception:
+            return {"error": error_body}
+    except Exception as e:
+        print(f"[VISUALIZER] Upload failed: {e}")
+        return {"error": f"Failed to upload files: {str(e)}"}
+
+
+def delete_dataset(dataset_id: str) -> dict:
+    """Proxy dataset deletion to DataViz API DELETE /api/dataset/{id}."""
+    try:
+        url = f"{DATA_VIZ_BASE_URL}/api/dataset/{dataset_id}"
+        req = urllib.request.Request(url, method="DELETE")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except Exception as e:
+        print(f"[VISUALIZER] Delete failed for {dataset_id}: {e}")
+        return {"error": str(e)}
+
 
 def list_datasets() -> List[Dict[str, Any]]:
     """List all uploaded datasets from the Data Visualization API."""
@@ -242,6 +318,137 @@ def chat_visualizer(
         return {
             "intent": "error",
             "message": f"Failed to connect to Data Visualization service: {str(e)}",
+            "chart": None,
+        }
+
+
+# ─────────────────────────────────────────────────────────────────
+# CONVERSATION TEXT EXTRACTION  (for /api/text fallback)
+# ─────────────────────────────────────────────────────────────────
+
+def chat_has_chartable_data(chat_history: List[Dict[str, str]]) -> bool:
+    """
+    Check whether the conversation history contains assistant messages
+    with actual data that could be charted (tables, numbers, metrics).
+    
+    Returns False if the only content is the user's current question
+    (i.e., no prior RAG response with data).
+    """
+    if not chat_history:
+        return False
+    
+    for msg in chat_history:
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content", "")
+        # Skip tool-call UI messages
+        if content.startswith(("📊", "🔧", "✅")):
+            continue
+        # Check for indicators of chartable data
+        has_table = "|---" in content or "|–" in content
+        has_numbers = any(c.isdigit() for c in content)
+        has_financial_keywords = any(kw in content.lower() for kw in [
+            "revenue", "profit", "crore", "lakh", "million", "billion",
+            "₹", "$", "growth", "fy", "quarter", "q1", "q2", "q3", "q4",
+            "income", "net", "total", "ebitda", "margin"
+        ])
+        if has_numbers and (has_table or has_financial_keywords):
+            return True
+    return False
+
+def extract_conversation_text(chat_history: List[Dict[str, str]]) -> str:
+    """
+    Extract meaningful data content from the conversation history.
+    
+    Focuses on assistant responses that contain tables, numbers, and
+    structured data that the DataViz API can parse.
+    
+    Strategy:
+      1. Walk messages in reverse (most recent first)
+      2. Prefer messages with markdown tables (|---|) or CSV-like data
+      3. Include all user+assistant text as context
+      4. Cap at a reasonable size for the API
+    """
+    if not chat_history:
+        return ""
+
+    MAX_CHARS = 12000  # /api/text can handle large text
+    parts = []
+    total = 0
+
+    # Walk in reverse — most recent messages are most relevant
+    for msg in reversed(chat_history):
+        role = msg.get("role", "")
+        content = msg.get("content", "").strip()
+        if not content or role not in ("user", "assistant"):
+            continue
+
+        # Skip tool-call UI messages (📊, 🔧, ✅ prefixed)
+        if content.startswith(("📊", "🔧", "✅")):
+            continue
+
+        chunk = f"[{role.upper()}]: {content}\n\n"
+        if total + len(chunk) > MAX_CHARS:
+            break
+        parts.append(chunk)
+        total += len(chunk)
+
+    # Reverse back to chronological order
+    parts.reverse()
+    return "".join(parts)
+
+
+# ─────────────────────────────────────────────────────────────────
+# TEXT-BASED VISUALIZATION  (no upload required)
+# ─────────────────────────────────────────────────────────────────
+
+def text_visualizer(
+    text: str,
+    question: str,
+    name: str = "conversation_data"
+) -> Dict[str, Any]:
+    """
+    Send raw text + question to /api/text for instant visualization.
+    
+    This endpoint parses the text (CSV, TSV, markdown table, or natural
+    language), answers the question or generates a chart, and returns
+    the result.  Data is NOT stored on the server.
+    
+    Returns the same shape as chat_visualizer (intent, message, chart, etc).
+    """
+    try:
+        url = f"{DATA_VIZ_BASE_URL}/api/text"
+        payload: Dict[str, Any] = {
+            "text": text,
+            "question": question,
+            "name": name,
+        }
+
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read())
+            print(f"[VISUALIZER/TEXT] Response intent: {result.get('intent')}, "
+                  f"chart_type: {result.get('chart_type')}, "
+                  f"has_chart: {result.get('chart') is not None}")
+            return result
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode() if e.fp else str(e)
+        print(f"[VISUALIZER/TEXT] HTTP Error {e.code}: {error_body}")
+        return {
+            "intent": "error",
+            "message": f"Text visualization API error: {error_body}",
+            "chart": None,
+        }
+    except Exception as e:
+        print(f"[VISUALIZER/TEXT] Request failed: {e}")
+        return {
+            "intent": "error",
+            "message": f"Failed to connect to Text Visualization service: {str(e)}",
             "chart": None,
         }
 
