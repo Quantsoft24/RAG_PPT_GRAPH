@@ -131,7 +131,7 @@ export const api = {
 
   async createConversation(opts: { title: string; context_company_ticker?: string }): Promise<Conversation> {
     const conv: Conversation = {
-      id: crypto.randomUUID(),
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36),
       title: opts.title,
       updated_at: new Date().toISOString(),
       messages: [],
