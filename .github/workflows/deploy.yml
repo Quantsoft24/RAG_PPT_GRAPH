@@ -27,7 +27,8 @@ jobs:
             git pull origin production
 
             echo "🔨 Building Docker images..."
-            docker compose -f docker-compose.prod.yml build
+            docker compose -f docker-compose.prod.yml build --no-cache frontend
+            docker compose -f docker-compose.prod.yml build backend
 
             echo "🚀 Restarting services..."
             docker compose -f docker-compose.prod.yml up -d
