@@ -1,0 +1,39 @@
+name: 🚀 Deploy to AWS Production
+
+# Only triggers when code is pushed/merged to production
+on:
+  push:
+    branches: [production]
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 🔐 Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/PRISM_ANALYST
+
+            echo "📥 Pulling latest production code..."
+            git fetch origin production
+            git checkout production
+            git pull origin production
+
+            echo "🔨 Building Docker images..."
+            docker compose -f docker-compose.prod.yml build
+
+            echo "🚀 Restarting services..."
+            docker compose -f docker-compose.prod.yml up -d
+
+            echo "🧹 Cleaning old images..."
+            docker image prune -f
+
+            echo "✅ Deployment complete!"
+            docker compose -f docker-compose.prod.yml ps
