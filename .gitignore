@@ -65,3 +65,4 @@ test_results.txt
 *.zip
 docs/
 companies_annual_report_and_results/
+!frontend/lib/
