@@ -25,7 +25,7 @@ from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 load_dotenv()
 
-DATA_VIZ_BASE_URL = os.getenv("DATA_VIZ_BASE_URL", "http://34.47.137.44:8080")
+DATA_VIZ_BASE_URL = os.getenv("DATA_VIZ_BASE_URL", "http://34.47.250.116:8080")
 
 
 # ─────────────────────────────────────────────────────────────────
