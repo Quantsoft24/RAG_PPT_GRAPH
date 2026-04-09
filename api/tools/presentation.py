@@ -27,7 +27,7 @@ from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 load_dotenv()
 
-PRESENTON_BASE_URL = os.getenv("PRESENTON_BASE_URL", "http://34.47.137.44:5000")
+PRESENTON_BASE_URL = os.getenv("PRESENTON_BASE_URL", "http://34.47.250.116:5000")
 
 # ─────────────────────────────────────────────────────────────────
 # INTENT DETECTION

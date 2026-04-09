@@ -17,7 +17,7 @@ const nextConfig = {
       },
       {
         source: '/presenton/:path*',
-        destination: 'http://34.47.137.44:5000/:path*',
+        destination: 'http://34.47.250.116:5000/:path*',
       },
     ];
   },
