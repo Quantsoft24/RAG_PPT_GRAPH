@@ -1017,7 +1017,7 @@ export default function ChatPage() {
             </svg>
           </button>
 
-          <button className="new-chat-btn" onClick={() => window.open('http://34.47.137.44:5000/dashboard', '_blank')} style={{ marginTop: '8px', background: 'var(--accent-blue)', color: 'white' }}>
+          <button className="new-chat-btn" onClick={() => window.open('http://34.47.250.116:5000/dashboard', '_blank')} style={{ marginTop: '8px', background: 'var(--accent-blue)', color: 'white' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ width: '28px', height: '28px', background: 'rgba(255,255,255,0.2)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
@@ -1029,7 +1029,7 @@ export default function ChatPage() {
             </svg>
           </button>
 
-          <button className="new-chat-btn" onClick={() => window.open('http://34.47.137.44:8080/api/playground', '_blank')} style={{ marginTop: '8px', background: '#10b981', color: 'white' }}>
+          <button className="new-chat-btn" onClick={() => window.open('http://34.47.250.116:8080/api/playground', '_blank')} style={{ marginTop: '8px', background: '#10b981', color: 'white' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ width: '28px', height: '28px', background: 'rgba(255,255,255,0.2)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10"></path><path d="M12 20V4"></path><path d="M6 20v-6"></path></svg>
