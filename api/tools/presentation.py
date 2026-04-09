@@ -262,14 +262,28 @@ def export_presentation(presentation_id: str, export_as: str = "pptx") -> Dict[s
 
 
 def get_download_url(path: str) -> str:
-    """Convert a Presenton relative path to a full download URL."""
+    """Convert a Presenton relative path to a proxied download URL via nginx."""
+    # Strip the base URL if it was already fully qualified
     if path.startswith("http"):
-        return path
-    return f"{PRESENTON_BASE_URL}{path}"
+        # Extract the path portion after the host
+        from urllib.parse import urlparse
+        parsed = urlparse(path)
+        path = parsed.path
+        if parsed.query:
+            path += f"?{parsed.query}"
+    # Route through nginx /presenton/ proxy to avoid cross-origin issues
+    # Remove leading slash if present since /presenton/ already has trailing slash logic
+    clean_path = path.lstrip("/")
+    return f"/presenton/{clean_path}"
 
 
 def get_edit_url(edit_path: str) -> str:
-    """Convert a Presenton edit_path to a full editor URL."""
+    """Convert a Presenton edit_path to a proxied editor URL via nginx."""
     if edit_path.startswith("http"):
-        return edit_path
-    return f"{PRESENTON_BASE_URL}{edit_path}"
+        from urllib.parse import urlparse
+        parsed = urlparse(edit_path)
+        edit_path = parsed.path
+        if parsed.query:
+            edit_path += f"?{parsed.query}"
+    clean_path = edit_path.lstrip("/")
+    return f"/presenton/{clean_path}"
