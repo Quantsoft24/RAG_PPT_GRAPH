@@ -265,15 +265,20 @@ def get_download_url(path: str) -> str:
     """Convert a Presenton relative path to a proxied download URL via nginx."""
     # Strip the base URL if it was already fully qualified
     if path.startswith("http"):
-        # Extract the path portion after the host
         from urllib.parse import urlparse
         parsed = urlparse(path)
         path = parsed.path
         if parsed.query:
             path += f"?{parsed.query}"
-    # Route through nginx /presenton/ proxy to avoid cross-origin issues
-    # Remove leading slash if present since /presenton/ already has trailing slash logic
+            
     clean_path = path.lstrip("/")
+    
+    import sys
+    # If running locally (Windows), return absolute URL since we don't have Nginx sub_filter locally
+    # and HTTP localhost doesn't trigger Mixed Content errors for HTTP iframes.
+    if sys.platform == "win32":
+        return f"{PRESENTON_BASE_URL}/{clean_path}"
+        
     return f"/presenton/{clean_path}"
 
 
@@ -285,5 +290,11 @@ def get_edit_url(edit_path: str) -> str:
         edit_path = parsed.path
         if parsed.query:
             edit_path += f"?{parsed.query}"
+            
     clean_path = edit_path.lstrip("/")
+    
+    import sys
+    if sys.platform == "win32":
+        return f"{PRESENTON_BASE_URL}/{clean_path}"
+        
     return f"/presenton/{clean_path}"

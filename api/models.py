@@ -193,3 +193,51 @@ class PresentationExportRequest(BaseModel):
     """Request to export a presentation."""
     presentation_id: str
     export_as: str = Field("pptx", description="Export format: pptx or pdf")
+
+
+# =============================================================================
+# TOOL MODELS — Business Model Canvas
+# =============================================================================
+
+class BMCGenerateRequest(BaseModel):
+    """Request to generate a Business Model Canvas analysis."""
+    company: str = Field(..., min_length=1, max_length=200, description="Company name to analyze")
+
+
+class BMCNode(BaseModel):
+    """A single BMC block node."""
+    id: str
+    title: str
+    summary: str = ""
+    evidence: List[str] = []
+    confidence: float = 0.0
+    key_insights: List[str] = []
+    sources: List[str] = []
+    icon: Optional[str] = None
+    color: Optional[str] = None
+
+
+class BMCResponse(BaseModel):
+    """Full BMC analysis response."""
+    id: Optional[str] = None
+    company: str
+    generated_at: Optional[str] = None
+    overall_confidence: float = 0.0
+    llm_provider: str = "gemini"
+    nodes: List[BMCNode] = []
+
+
+class BMCChatRequest(BaseModel):
+    """Request to ask a follow-up question about a BMC node."""
+    company: str = Field(..., description="Company name")
+    node_title: str = Field(..., description="BMC block title (e.g. 'Value Propositions')")
+    node_context: str = Field("", description="Existing analysis for context")
+    question: str = Field(..., min_length=1, max_length=1000, description="Follow-up question")
+
+
+class BMCChatResponse(BaseModel):
+    """Response to a BMC node follow-up question."""
+    answer: str
+    node_title: str
+    company: str
+

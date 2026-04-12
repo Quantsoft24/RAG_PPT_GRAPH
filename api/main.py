@@ -36,7 +36,8 @@ from api.models import (
     CompanyInfo, CitationDetail, FinancialMetric,
     HealthResponse, SearchMode,
     ClarificationResponse, ClarificationSuggestion,
-    PresentationGenerateRequest, PresentationStatusResponse, PresentationExportRequest
+    PresentationGenerateRequest, PresentationStatusResponse, PresentationExportRequest,
+    BMCGenerateRequest, BMCChatRequest, BMCChatResponse, BMCResponse
 )
 from api.database import get_db, init_pool, close_pool, check_db_health
 from api.rag import ask as rag_ask, check_ollama_health, retrieve_context, LLM_MODEL, EMBEDDING_MODEL
@@ -65,6 +66,15 @@ from api.tools.visualizer import (
     delete_dataset as viz_delete_dataset,
     ALLOWED_EXTENSIONS,
     MAX_FILE_SIZE_MB,
+)
+from api.tools.bmc import (
+    get_bmc_agent,
+    save_bmc,
+    load_bmc,
+    list_library,
+    delete_bmc,
+    export_bmc_json,
+    export_bmc_pdf,
 )
 
 
@@ -1173,6 +1183,79 @@ async def delete_viz_dataset(dataset_id: str):
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
+
+
+# =============================================================================
+# BUSINESS MODEL CANVAS (BMC) ENDPOINTS
+# =============================================================================
+
+@app.post("/api/v1/bmc/generate")
+async def bmc_generate(req: BMCGenerateRequest):
+    """Generate a Business Model Canvas analysis for a company."""
+    try:
+        agent = get_bmc_agent()
+        bmc_data = agent.generate(req.company)
+        # Auto-save to library
+        bmc_id = save_bmc(bmc_data)
+        bmc_data["id"] = bmc_id
+        return bmc_data
+    except Exception as e:
+        print(f"[BMC] Generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"BMC generation failed: {str(e)}")
+
+
+@app.post("/api/v1/bmc/chat")
+async def bmc_chat(req: BMCChatRequest):
+    """Ask a follow-up question about a specific BMC node."""
+    try:
+        agent = get_bmc_agent()
+        answer = agent.chat(req.company, req.node_title, req.node_context, req.question)
+        return BMCChatResponse(answer=answer, node_title=req.node_title, company=req.company)
+    except Exception as e:
+        print(f"[BMC] Chat error: {e}")
+        raise HTTPException(status_code=500, detail=f"BMC chat failed: {str(e)}")
+
+
+@app.get("/api/v1/bmc/library")
+async def bmc_library():
+    """List all saved BMC analyses."""
+    return list_library()
+
+
+@app.get("/api/v1/bmc/{bmc_id}")
+async def bmc_load(bmc_id: str):
+    """Load a specific saved BMC analysis."""
+    result = load_bmc(bmc_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="BMC analysis not found")
+    return result
+
+
+@app.delete("/api/v1/bmc/{bmc_id}")
+async def bmc_delete(bmc_id: str):
+    """Delete a saved BMC analysis."""
+    if delete_bmc(bmc_id):
+        return {"status": "deleted", "id": bmc_id}
+    raise HTTPException(status_code=404, detail="BMC analysis not found")
+
+
+@app.get("/api/v1/bmc/{bmc_id}/export")
+async def bmc_export(bmc_id: str, format: str = "json"):
+    """Export a BMC analysis as JSON or PDF."""
+    result = load_bmc(bmc_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="BMC analysis not found")
+
+    bmc_data = result["bmc_data"]
+
+    if format == "pdf":
+        pdf_bytes = export_bmc_pdf(bmc_data)
+        return JSONResponse(
+            content={"pdf_base64": __import__('base64').b64encode(pdf_bytes).decode(), "filename": f"bmc_{result['company_name']}.pdf"},
+            media_type="application/json"
+        )
+    else:
+        return JSONResponse(content=bmc_data)
 
 
 # =============================================================================
