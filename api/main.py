@@ -1204,12 +1204,60 @@ async def bmc_generate(req: BMCGenerateRequest):
         raise HTTPException(status_code=500, detail=f"BMC generation failed: {str(e)}")
 
 
+@app.post("/api/v1/bmc/generate/stream")
+async def bmc_generate_stream(req: BMCGenerateRequest):
+    """
+    Stream BMC generation progress via Server-Sent Events (SSE).
+
+    The Claude Agent SDK streams messages as the agent works through
+    its reasoning loop. Each SSE event contains a JSON payload:
+      • {"type": "status",  "message": "..."}     — progress updates
+      • {"type": "text",    "content": "..."}      — partial text chunks
+      • {"type": "tool",    "name": "...", ...}    — tool use events
+      • {"type": "cost",    "usd": 0.01}           — cost tracking
+      • {"type": "result",  "data": {...}}          — final BMC JSON
+      • {"type": "error",   "message": "..."}       — error events
+
+    Frontend should use EventSource or fetch() with ReadableStream to consume.
+    """
+    agent = get_bmc_agent()
+
+    # Check if the agent supports streaming (only Claude Agent SDK does)
+    if not hasattr(agent, 'generate_stream'):
+        # Fallback: generate synchronously and return as a single SSE event
+        async def _sync_fallback():
+            try:
+                yield f"data: {json.dumps({'type': 'status', 'message': f'Generating BMC for {req.company}...'})}\n\n"
+                bmc_data = agent.generate(req.company)
+                bmc_id = save_bmc(bmc_data)
+                bmc_data["id"] = bmc_id
+                yield f"data: {json.dumps({'type': 'result', 'data': bmc_data})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        return StreamingResponse(_sync_fallback(), media_type="text/event-stream")
+
+    # Claude Agent SDK: stream the agentic loop events
+    async def _stream_events():
+        try:
+            async for event in agent.generate_stream(req.company):
+                # Auto-save when we get the final result
+                if event.get("type") == "result" and "data" in event:
+                    bmc_id = save_bmc(event["data"])
+                    event["data"]["id"] = bmc_id
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(_stream_events(), media_type="text/event-stream")
+
+
 @app.post("/api/v1/bmc/chat")
 async def bmc_chat(req: BMCChatRequest):
     """Ask a follow-up question about a specific BMC node."""
     try:
         agent = get_bmc_agent()
-        answer = agent.chat(req.company, req.node_title, req.node_context, req.question)
+        history_dicts = [{"role": m.role, "content": m.content} for m in req.history] if req.history else []
+        answer = agent.chat(req.company, req.node_title, req.node_context, req.question, history=history_dicts)
         return BMCChatResponse(answer=answer, node_title=req.node_title, company=req.company)
     except Exception as e:
         print(f"[BMC] Chat error: {e}")

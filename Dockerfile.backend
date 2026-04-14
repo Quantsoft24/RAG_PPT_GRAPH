@@ -17,6 +17,10 @@ COPY global-bundle.pem ./global-bundle.pem
 RUN touch ./database/__init__.py
 
 # Install Python packages
+# NOTE (Docker image size): claude-agent-sdk bundles the Claude Code CLI binary
+# which adds ~100MB to the image. If image size becomes a concern:
+#   1. Use a multi-stage build to strip unnecessary files
+#   2. Or swap back to 'anthropic>=0.30' for raw API access (no agentic features)
 RUN pip install --no-cache-dir \
     fastapi==0.115.* \
     "uvicorn[standard]>=0.34,<1" \
@@ -24,7 +28,7 @@ RUN pip install --no-cache-dir \
     python-dotenv>=1.0 \
     python-multipart>=0.0.9 \
     pydantic>=2.0 \
-    anthropic>=0.30 \
+    claude-agent-sdk>=0.1 \
     fpdf2>=2.7
 
 # Health check

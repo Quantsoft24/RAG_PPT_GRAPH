@@ -227,12 +227,18 @@ class BMCResponse(BaseModel):
     nodes: List[BMCNode] = []
 
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
 class BMCChatRequest(BaseModel):
     """Request to ask a follow-up question about a BMC node."""
     company: str = Field(..., description="Company name")
     node_title: str = Field(..., description="BMC block title (e.g. 'Value Propositions')")
     node_context: str = Field("", description="Existing analysis for context")
     question: str = Field(..., min_length=1, max_length=1000, description="Follow-up question")
+    history: List[ChatMessage] = Field(default=[], description="Previous conversation messages")
 
 
 class BMCChatResponse(BaseModel):
