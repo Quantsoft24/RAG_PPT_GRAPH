@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import './bmc.css';
 
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
@@ -73,9 +75,15 @@ const apiFetch = async (url: string, opts?: RequestInit) => {
   return r.json();
 };
 const apiGenerate = (company: string) => apiFetch(`${API}/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company }) });
-const apiChat = (company: string, t: string, ctx: string, q: string) => apiFetch(`${API}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company, node_title: t, node_context: ctx, question: q }) });
+const apiChat = (company: string, t: string, ctx: string, q: string, history: {role:string;content:string}[] = [], bmc_id?: string) => apiFetch(`${API}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company, node_title: t, node_context: ctx, question: q, history, bmc_id }) });
+const apiLoadChatHistory = (bmcId: string, nodeId: string) => apiFetch(`${API}/${bmcId}/chat/${encodeURIComponent(nodeId)}`).catch(() => ({ messages: [] }));
 const apiLibrary = () => apiFetch(`${API}/library`).catch(() => []);
-const apiLoad = (id: string) => apiFetch(`${API}/${id}`).then(d => d.bmc_data || d).catch(() => null);
+const apiLoad = (id: string) => apiFetch(`${API}/${id}`).then(d => {
+  const inner = d.bmc_data || d;
+  // Always ensure the DB id is present on the bmcData object
+  if (!inner.id && d.id) inner.id = d.id;
+  return inner;
+}).catch(() => null);
 const apiExport = (id: string, fmt: string) => apiFetch(`${API}/${id}/export?format=${fmt}`);
 const apiDelete = (id: string) => fetch(`${API}/${id}`, { method: 'DELETE' });
 
@@ -159,7 +167,7 @@ export default function BMCPage() {
   const [streamStatus, setStreamStatus] = useState(''); // SSE progress messages
 
   const [chatQ, setChatQ] = useState('');
-  const [chatHistory, setChatHistory] = useState<{role: 'user'|'model', content: string}[]>([]);
+  const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'model', content: string }[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
 
   const [library, setLibrary] = useState<LibraryItem[]>([]);
@@ -217,6 +225,17 @@ export default function BMCPage() {
     if (!bmcData || expanded) return;
     setExpanded(true);
     setGraphData(buildFullGraph(bmcData));
+
+    // Zoom in on the newly expanded full canvas
+    setTimeout(() => {
+      if (graphRef.current) {
+        graphRef.current.cameraPosition(
+          { x: 0, y: -10, z: 150 }, // y: -15 shifts camera down, moving graph UP to visually center hanging text
+          { x: 0, y: -10, z: 0 },
+          1200
+        );
+      }
+    }, 50);
   }, [bmcData, expanded]);
 
   // ── BMC node click → open panel + highlight ──
@@ -226,13 +245,28 @@ export default function BMCPage() {
     setSelected(node.bmcData);
     setPanelOpen(true);
     setChatHistory([]); setChatQ('');
-    // Camera focus
+    // Load saved chat history from DB
+    console.log('[BMC] Node clicked, bmcData.id =', bmcData?.id, 'node.title =', node.bmcData?.title);
+    if (bmcData?.id && node.bmcData?.title) {
+      apiLoadChatHistory(bmcData.id, node.bmcData.title).then((res: any) => {
+        console.log('[BMC] Loaded chat history:', res);
+        if (res?.messages?.length) setChatHistory(res.messages);
+      });
+    }
+    // Camera focus (Orbital pan to move node to the right without hiding center)
     if (graphRef.current) {
-      const dist = 200;
-      const ratio = 1 + dist / Math.hypot(node.x || 0, node.y || 0, node.z || 0);
+      const nx = node.x || 0;
+      const nz = node.z || 0;
+      // 45-degree orbital vector to throw the node to the right of the screen
+      let cx = nx - nz;
+      let cz = nx + nz;
+      const len = Math.hypot(cx, cz) || 1;
+      const dist = 150; // Orbital zoom distance
+
       graphRef.current.cameraPosition(
-        { x: (node.x || 0) * ratio, y: (node.y || 0) * ratio, z: (node.z || 0) * ratio },
-        node, 1200
+        { x: (cx / len) * dist, y: (node.y || 0) * 0.4 - 15, z: (cz / len) * dist }, // Pan camera to the side
+        { x: 0, y: -10, z: 0 }, // Look fiercely at the central root node, not the clicked node
+        1200
       );
     }
   }, [handleCenterClick]);
@@ -243,13 +277,13 @@ export default function BMCPage() {
     const q = chatQ.trim();
     setChatLoading(true); setChatQ('');
     setChatHistory(prev => [...prev, { role: 'user', content: q }]);
-    
-    try { 
-      const r = await apiChat(bmcData.company, selected.title, selected.summary, q, chatHistory); 
+
+    try {
+      const r = await apiChat(bmcData.company, selected.title, selected.summary, q, chatHistory, bmcData.id);
       setChatHistory(prev => [...prev, { role: 'model', content: r.answer }]);
     }
-    catch { 
-      setChatHistory(prev => [...prev, { role: 'model', content: 'Failed. Try again.' }]); 
+    catch {
+      setChatHistory(prev => [...prev, { role: 'model', content: 'Failed. Try again.' }]);
     }
     finally { setChatLoading(false); }
   }, [chatQ, selected, bmcData, chatHistory]);
@@ -319,7 +353,6 @@ export default function BMCPage() {
     const THREE = require('three');
     const group = new THREE.Group();
     const isSel = selected?.id === node.id;
-    const isHov = hovered === node.id;
     const isDimmed = selected && !isSel && !node.isCenter;
 
     if (node.isCenter) {
@@ -385,8 +418,8 @@ export default function BMCPage() {
     } else {
       // ── BMC NODE: Luminous Glass Bubble ──
       const col = new THREE.Color(node.color);
-      const dimFactor = isDimmed ? 0.25 : 1;
-      const alpha = (isSel ? 1 : isHov ? 0.8 : 0.5) * dimFactor;
+      const dimFactor = isDimmed ? 0.75 : 1;
+      const alpha = (isSel ? 1 : 0.65) * dimFactor;
 
       // Draw beautiful 2D glowing glass bubble with an edge stroke using Canvas
       const bubbleCnv = document.createElement('canvas');
@@ -401,7 +434,7 @@ export default function BMCPage() {
         bgGrad.addColorStop(1, `rgba(${col.r * 255}, ${col.g * 255}, ${col.b * 255}, 0.8)`);
         bCtx.fillStyle = bgGrad;
         bCtx.beginPath(); bCtx.arc(64, 64, r, 0, Math.PI * 2); bCtx.fill();
-        
+
         // Edge stroke
         bCtx.strokeStyle = `rgba(${col.r * 255}, ${col.g * 255}, ${col.b * 255}, 1)`;
         bCtx.lineWidth = 4;
@@ -422,7 +455,7 @@ export default function BMCPage() {
         ictx.clearRect(0, 0, 128, 128);
         // Make icon huge, filling the bubble
         ictx.font = '80px serif'; ictx.textAlign = 'center'; ictx.textBaseline = 'middle';
-        ictx.globalAlpha = isDimmed ? 0.4 : 1;
+        ictx.globalAlpha = isDimmed ? 0.75 : 1;
         // Basic emoji drop shadow for depth
         ictx.shadowColor = `rgba(${col.r * 255}, ${col.g * 255}, ${col.b * 255}, 0.8)`;
         ictx.shadowBlur = 10;
@@ -443,17 +476,15 @@ export default function BMCPage() {
 
         // Title
         lctx.font = `bold ${isSel ? '24px' : '20px'} Inter, system-ui, sans-serif`;
-        lctx.fillStyle = isSel ? '#ffffff' : (isHov ? '#ffffff' : '#c8d0e8');
+        lctx.fillStyle = isSel ? '#ffffff' : '#c8d0e8';
         lctx.textAlign = 'center'; lctx.textBaseline = 'top';
         lctx.fillText(node.shortLabel.substring(0, 24), 210, 6);
 
         // Description (1 line truncated for clean look)
-        if (!isDimmed) {
-          lctx.font = '14px Inter, system-ui, sans-serif';
-          lctx.fillStyle = isSel ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.6)';
-          const str = (node.desc || '').substring(0, 50) + '...';
-          lctx.fillText(str, 210, 36);
-        }
+        lctx.font = '14px Inter, system-ui, sans-serif';
+        lctx.fillStyle = isSel ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.6)';
+        const str = (node.desc || '').substring(0, 50) + '...';
+        lctx.fillText(str, 210, 36);
 
         const ltex = new THREE.CanvasTexture(lc); ltex.needsUpdate = true;
         const lsp = new THREE.Sprite(new THREE.SpriteMaterial({ map: ltex, transparent: true, depthWrite: false }));
@@ -461,19 +492,14 @@ export default function BMCPage() {
         group.add(lsp);
       }
 
-      // Selected massive ambient glow
+      // Selected massive ambient glow only
       if (isSel) {
         const halo = new THREE.SphereGeometry(14, 32, 32);
         group.add(new THREE.Mesh(halo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending })));
       }
-      // Hover glow
-      if (isHov && !isSel) {
-        const hGlow = new THREE.SphereGeometry(10, 32, 32);
-        group.add(new THREE.Mesh(hGlow, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.05 })));
-      }
     }
     return group;
-  }, [selected, hovered, expanded]);
+  }, [selected, expanded]);
 
   // ── Node hover handler — project 3D coords to screen for tooltip ──
   const handleNodeHover = useCallback((node: any) => {
@@ -508,32 +534,47 @@ export default function BMCPage() {
   return (
     <div className="bmc-page">
       {/* ── Top Bar ── */}
-      <div className="bmc-topbar">
-        <div className="bmc-topbar-left">
-          <a className="bmc-logo" href="/chat">
-            <div className="bmc-logo-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
-                <line x1="12" y1="22" x2="12" y2="15.5" />
-                <polyline points="22 8.5 12 15.5 2 8.5" />
-              </svg>
+      <div className="bmc-topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+          <div className="bmc-topbar-left" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <a href="/chat" title="Back to PRISM Chat" style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                color: 'rgba(255,255,255,0.5)', transition: 'color 0.2s ease', cursor: 'pointer', textDecoration: 'none'
+              }} onMouseEnter={e => e.currentTarget.style.color = '#fff'} onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.5)'}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span style={{ fontSize: '14px', fontWeight: 500 }}>Back</span>
+              </a>
+              <div className="bmc-logo-icon" style={{ opacity: 0.9 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
+                  <line x1="12" y1="22" x2="12" y2="15.5" />
+                  <polyline points="22 8.5 12 15.5 2 8.5" />
+                </svg>
+              </div>
             </div>
-          </a>
-          <div className="bmc-search-container">
-            <svg className="bmc-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-            <input className="bmc-search-input" type="text" placeholder="Search: 'Tesla, Inc.'" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleGenerate()} />
+
+            <div className="bmc-search-container" style={{ marginLeft: '8px' }}>
+              <svg className="bmc-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+              <input className="bmc-search-input" type="text" placeholder="Search: 'Tesla, Inc.'" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleGenerate()} />
+            </div>
           </div>
         </div>
-        <div className="bmc-topbar-center">
-          <button className={`bmc-tab ${tab === 'home' ? 'active' : ''}`} onClick={() => setTab('home')}>Home</button>
-          <button className={`bmc-tab ${tab === 'library' ? 'active' : ''}`} onClick={() => setTab('library')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
-            Library
-          </button>
+
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+          <div className="bmc-topbar-center">
+            <button className={`bmc-tab ${tab === 'home' ? 'active' : ''}`} onClick={() => setTab('home')}>Home</button>
+            <button className={`bmc-tab ${tab === 'library' ? 'active' : ''}`} onClick={() => setTab('library')}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
+              Library
+            </button>
+          </div>
         </div>
-        <div className="bmc-topbar-right">
-          <button className="bmc-topbar-icon" title="Info"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg></button>
-          <div className="bmc-avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg></div>
+
+        <div style={{ flex: 1 }}>
         </div>
       </div>
 
@@ -560,23 +601,59 @@ export default function BMCPage() {
         <div className="bmc-main">
           {/* Left toolbar */}
           <div className="bmc-left-toolbar">
-            <button className="bmc-tool-btn" title="Reset View" onClick={() => graphRef.current?.cameraPosition({ x: 0, y: 0, z: 400 }, { x: 0, y: 0, z: 0 }, 1000)}>
+            <button
+              className="bmc-tool-btn"
+              title="Reset View"
+              onClick={() => {
+                if (expanded) {
+                  graphRef.current?.cameraPosition({ x: 0, y: -15, z: 150 }, { x: 0, y: -10, z: 0 }, 1000);
+                } else {
+                  graphRef.current?.cameraPosition({ x: 0, y: 0, z: 300 }, { x: 0, y: 0, z: 0 }, 1000);
+                }
+              }}
+              disabled={!bmcData}
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 9 22 12 19 15" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></svg>
             </button>
-            <button className="bmc-tool-btn" title="Zoom In" onClick={() => { if (graphRef.current) { const c = graphRef.current.camera(); graphRef.current.cameraPosition({ x: c.position.x * 0.8, y: c.position.y * 0.8, z: c.position.z * 0.8 }, undefined, 500); } }}>
+            <button
+              className="bmc-tool-btn"
+              title="Zoom In"
+              disabled={!bmcData}
+              onClick={() => { if (graphRef.current) { const c = graphRef.current.camera(); graphRef.current.cameraPosition({ x: c.position.x * 0.8, y: c.position.y * 0.8, z: c.position.z * 0.8 }, undefined, 500); } }}
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
             </button>
-            <button className="bmc-tool-btn" title="Zoom Out" onClick={() => { if (graphRef.current) { const c = graphRef.current.camera(); graphRef.current.cameraPosition({ x: c.position.x * 1.3, y: c.position.y * 1.3, z: c.position.z * 1.3 }, undefined, 500); } }}>
+            <button
+              className="bmc-tool-btn"
+              title="Zoom Out"
+              disabled={!bmcData}
+              onClick={() => { if (graphRef.current) { const c = graphRef.current.camera(); graphRef.current.cameraPosition({ x: c.position.x * 1.3, y: c.position.y * 1.3, z: c.position.z * 1.3 }, undefined, 500); } }}
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
             </button>
             <div className="bmc-tool-divider" />
-            <button className="bmc-tool-btn" title="Export JSON" onClick={() => handleExport('json')}>
+            <button
+              className="bmc-tool-btn"
+              title={bmcData?.id ? 'Export JSON' : 'Load a company first to export'}
+              disabled={!bmcData?.id}
+              onClick={() => handleExport('json')}
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6z" /><polyline points="14 2 14 8 20 8" /></svg>
             </button>
-            <button className="bmc-tool-btn" title="Export PNG" onClick={() => handleExport('png')}>
+            <button
+              className="bmc-tool-btn"
+              title={bmcData ? 'Export PNG (screenshot)' : 'Load a company first to export'}
+              disabled={!bmcData}
+              onClick={() => handleExport('png')}
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
             </button>
-            <button className="bmc-tool-btn" title="Export PDF" onClick={() => handleExport('pdf')}>
+            <button
+              className="bmc-tool-btn"
+              title={bmcData?.id ? 'Export PDF' : 'Load a company first to export'}
+              disabled={!bmcData?.id}
+              onClick={() => handleExport('pdf')}
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             </button>
           </div>
@@ -584,14 +661,14 @@ export default function BMCPage() {
           {/* Graph */}
           <div className="bmc-graph-container" ref={containerRef}>
             {loading && (
-              <div className="bmc-loading">
+              <div className="bmc-loading" style={{ position: 'fixed', left: '50vw', top: '50vh', transform: 'translate(-50%, -50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 <div className="bmc-loading-orb"><div className="bmc-loading-ring" /><div className="bmc-loading-ring bmc-loading-ring-2" /><div className="bmc-loading-dot" /></div>
                 <div className="bmc-loading-text">{streamStatus || "Analyzing business model with AI..."}</div>
                 <div className="bmc-loading-subtext">{streamStatus ? `` : `Generating 9 BMC blocks for ${search}`}</div>
               </div>
             )}
             {!loading && !bmcData && (
-              <div className="bmc-empty">
+              <div className="bmc-empty" style={{ position: 'fixed', left: '50vw', top: '50vh', transform: 'translate(-50%, -50%)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 <div className="bmc-empty-orb"><div className="bmc-empty-ring" /><div className="bmc-empty-ring bmc-empty-ring-2" />
                   <svg className="bmc-empty-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" /><line x1="12" y1="22" x2="12" y2="15.5" /><polyline points="22 8.5 12 15.5 2 8.5" /></svg>
                 </div>
@@ -609,15 +686,15 @@ export default function BMCPage() {
                   onNodeClick={handleNodeClick}
                   onNodeHover={handleNodeHover}
                   linkColor={(link: any) => {
-                    const tid = typeof link.target === 'string' ? link.target : link.target?.id; 
+                    const tid = typeof link.target === 'string' ? link.target : link.target?.id;
                     const tNode = graphData.nodes.find(n => n.id === tid);
                     const col = tNode ? tNode.color : '#00bcd4';
-                    return selected && selected.id !== tid ? `${col}11` : `${col}88`; // very translucent when not selected, solid glowing gradient otherwise
-                  }} 
-                  linkWidth={(link: any) => { 
-                    if (!selected) return 2.5; 
-                    const tid = typeof link.target === 'string' ? link.target : link.target?.id; 
-                    return tid === selected.id ? 4.5 : 0.8; 
+                    return selected && selected.id !== tid ? `${col}44` : `${col}aa`; // translucent when not selected, solid glowing gradient otherwise
+                  }}
+                  linkWidth={(link: any) => {
+                    if (!selected) return 1.5;
+                    const tid = typeof link.target === 'string' ? link.target : link.target?.id;
+                    return tid === selected.id ? 4.5 : 1.5;
                   }}
                   linkResolution={36}
                   linkOpacity={0.9}
@@ -631,10 +708,10 @@ export default function BMCPage() {
                   linkDirectionalParticles={(link: any) => { if (!selected) return 3; const tid = typeof link.target === 'string' ? link.target : link.target?.id; return tid === selected.id ? 6 : 1; }}
                   linkDirectionalParticleWidth={(link: any) => { if (!selected) return 3; const tid = typeof link.target === 'string' ? link.target : link.target?.id; return tid === selected.id ? 4.5 : 1; }}
                   linkDirectionalParticleSpeed={0.0035}
-                  linkDirectionalParticleColor={(link: any) => { 
-                    const tid = typeof link.target === 'string' ? link.target : link.target?.id; 
+                  linkDirectionalParticleColor={(link: any) => {
+                    const tid = typeof link.target === 'string' ? link.target : link.target?.id;
                     const tNode = graphData.nodes.find(n => n.id === tid);
-                    return tNode ? tNode.color : '#ffffff'; 
+                    return tNode ? tNode.color : '#ffffff';
                   }}
                   enableNodeDrag={true} enableNavigationControls={true} showNavInfo={false}
                   cooldownTime={3000} d3AlphaDecay={0.02} d3VelocityDecay={0.3}
@@ -644,14 +721,13 @@ export default function BMCPage() {
                 {hoveredNode && tooltipPos && (
                   <div className="bmc-hover-tooltip" style={{ left: tooltipPos.x, top: tooltipPos.y }}>
                     <div className="bmc-hover-title">{hoveredNode.icon} {hoveredNode.title}</div>
-                    <div className="bmc-hover-desc">{hoveredNode.summary?.substring(0, 120)}{(hoveredNode.summary?.length || 0) > 120 ? '...' : ''}</div>
-                    <div className="bmc-hover-conf">Confidence: {Math.round((hoveredNode.confidence || 0) * 100)}%</div>
+                    <div className="bmc-hover-desc" style={{ whiteSpace: 'pre-wrap' }}>{hoveredNode.summary?.substring(0, 300)}{(hoveredNode.summary?.length || 0) > 300 ? '...' : ''}</div>
                   </div>
                 )}
 
-                {/* Bottom controls */}
-                <div className="bmc-graph-controls">
-                  <button className="bmc-control-btn" title="Reset" onClick={() => graphRef.current?.cameraPosition({ x: 0, y: 0, z: 400 }, { x: 0, y: 0, z: 0 }, 1000)}>
+                {/* Bottom controls — shift left when panel is open */}
+                <div className="bmc-graph-controls" style={{ right: panelOpen ? 380 : 20, transition: 'right 0.3s ease' }}>
+                  <button className="bmc-control-btn" title="Reset" onClick={() => graphRef.current?.cameraPosition({ x: 0, y: -15, z: 150 }, { x: 0, y: -15, z: 0 }, 1000)}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 9 22 12 19 15" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></svg>
                   </button>
                   <button className="bmc-control-btn" title="Zoom In" onClick={() => { if (graphRef.current) { const c = graphRef.current.camera(); graphRef.current.cameraPosition({ x: c.position.x * 0.8, y: c.position.y * 0.8, z: c.position.z * 0.8 }, undefined, 500); } }}>
@@ -660,16 +736,13 @@ export default function BMCPage() {
                   <button className="bmc-control-btn" title="Zoom Out" onClick={() => { if (graphRef.current) { const c = graphRef.current.camera(); graphRef.current.cameraPosition({ x: c.position.x * 1.3, y: c.position.y * 1.3, z: c.position.z * 1.3 }, undefined, 500); } }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
                   </button>
-                  <button className="bmc-control-btn" title="Fullscreen" onClick={() => containerRef.current?.requestFullscreen?.()}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
-                  </button>
                 </div>
               </>
             )}
           </div>
 
           {/* Panel */}
-          <div className={`bmc-panel ${panelOpen ? 'open' : ''}`}>
+          <div className={`bmc-panel ${panelOpen ? 'open' : ''}`} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 20 }}>
             {selected && (
               <>
                 <div className="bmc-panel-header">
@@ -681,55 +754,69 @@ export default function BMCPage() {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   </button>
                 </div>
-                <div className="bmc-panel-body">
-                  <div className="bmc-panel-section"><div className="bmc-panel-field-label">Title:</div><div className="bmc-panel-field-value">{selected.title} — {bmcData?.company}</div></div>
-                  <div className="bmc-panel-section"><div className="bmc-panel-field-label">AI Summary:</div><p className="bmc-panel-summary">{selected.summary}</p></div>
-                  {selected.evidence?.length > 0 && <div className="bmc-panel-section"><div className="bmc-panel-field-label">Evidence:</div><p className="bmc-panel-summary">{selected.evidence.join('; ')}</p></div>}
-                  <div className="bmc-panel-section">
-                    <div className="bmc-panel-field-label">Confidence Score: {Math.round((selected.confidence || 0) * 100)}% ({selected.confidence >= 0.9 ? 'Very High' : selected.confidence >= 0.8 ? 'High' : selected.confidence >= 0.6 ? 'Medium' : 'Low'})</div>
-                    <div className="bmc-confidence-bar"><div className="bmc-confidence-track"><div className="bmc-confidence-fill" style={{ width: `${(selected.confidence || 0) * 100}%`, background: `linear-gradient(90deg, ${selected.color || '#7C4DFF'}, ${selected.color || '#7C4DFF'}88)` }} /></div></div>
-                  </div>
-                  {selected.key_insights?.length > 0 && <div className="bmc-panel-section"><div className="bmc-panel-field-label">Key Insights:</div><p className="bmc-panel-summary">{selected.key_insights.join('; ')}</p></div>}
-                </div>
-                <div className="bmc-chat-section" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                  <div className="bmc-chat-header">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-                    Analyst AI Chat
-                    <button className="bmc-chat-close" onClick={() => setChatHistory([])}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
-                  </div>
-                  
-                  <div className="bmc-chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {chatHistory.length === 0 ? (
-                      <div style={{ textAlign: 'center', opacity: 0.5, fontSize: '13px', margin: 'auto' }}>Ask a follow-up question...</div>
-                    ) : (
-                      chatHistory.map((msg, i) => (
-                        <div key={i} style={{ 
-                          alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                          background: msg.role === 'user' ? 'rgba(0, 188, 212, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                          border: `1px solid ${msg.role === 'user' ? 'rgba(0, 188, 212, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
-                          padding: '10px 14px', borderRadius: '12px',
-                          borderTopRightRadius: msg.role === 'user' ? '4px' : '12px',
-                          borderTopLeftRadius: msg.role === 'model' ? '4px' : '12px',
-                          maxWidth: '90%', fontSize: '13.5px', lineHeight: '1.5',
-                          color: msg.role === 'user' ? '#e2f6ff' : '#cbd5e1'
-                        }}>
-                          {msg.content}
-                        </div>
-                      ))
-                    )}
-                    {chatLoading && (
-                      <div style={{ alignSelf: 'flex-start', background: 'rgba(255, 255, 255, 0.05)', padding: '10px 14px', borderRadius: '12px', borderTopLeftRadius: '4px' }}>
-                        <div className="bmc-chat-send-spinner" style={{ borderColor: 'rgba(255, 255, 255, 0.3)', borderTopColor: '#fff' }} />
-                      </div>
-                    )}
+                <div className="bmc-panel-scrollable" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  <div className="bmc-panel-body" style={{ flex: 'none', overflowY: 'visible', paddingBottom: '16px' }}>
+                    <div className="bmc-panel-section"><div className="bmc-panel-field-label">Title:</div><div className="bmc-panel-field-value">{selected.title} — {bmcData?.company}</div></div>
+                    <div className="bmc-panel-section"><div className="bmc-panel-field-label">AI Summary:</div><p className="bmc-panel-summary" style={{ whiteSpace: 'pre-wrap' }}>{selected.summary}</p></div>
+                    {selected.evidence?.length > 0 && <div className="bmc-panel-section"><div className="bmc-panel-field-label">Evidence:</div>
+                      <ul className="bmc-panel-summary" style={{ paddingLeft: '20px', margin: '4px 0 0 0' }}>{selected.evidence.map((e: string, i: number) => <li key={i}>{e}</li>)}</ul>
+                    </div>}
+                    {selected.key_insights?.length > 0 && <div className="bmc-panel-section"><div className="bmc-panel-field-label">Key Insights:</div>
+                      <ul className="bmc-panel-summary" style={{ paddingLeft: '20px', margin: '4px 0 0 0' }}>{selected.key_insights.map((e: string, i: number) => <li key={i}>{e}</li>)}</ul>
+                    </div>}
                   </div>
 
-                  <div className="bmc-chat-input-row" style={{ marginTop: 'auto', padding: '12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <input className="bmc-chat-input" placeholder={`Ask about ${selected.title}...`} value={chatQ} onChange={e => setChatQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleChat()} />
-                    <button className="bmc-chat-send" onClick={handleChat} disabled={chatLoading || !chatQ.trim()}>
-                      {chatLoading ? <div className="bmc-chat-send-spinner" /> : <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z" /></svg>}
-                    </button>
+                  <div className="bmc-chat-section" style={{ flex: 'none', display: 'flex', flexDirection: 'column' }}>
+                    <div className="bmc-chat-header" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', backgroundColor: 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                        Analyst AI Chat
+                      </div>
+                      {chatHistory.length > 0 && (
+                        <button className="bmc-chat-close" title="Clear Chat History" onClick={() => setChatHistory([])} style={{ opacity: 0.6 }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="bmc-chat-messages" style={{ overflowY: 'visible', padding: '12px 24px', display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px' }}>
+                      {chatHistory.length > 0 && chatHistory.map((msg, i) => (
+                          <div key={i} style={{
+                            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                            background: msg.role === 'user' ? 'rgba(0, 188, 212, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                            border: `1px solid ${msg.role === 'user' ? 'rgba(0, 188, 212, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
+                            padding: '10px 14px', borderRadius: '12px',
+                            borderTopRightRadius: msg.role === 'user' ? '4px' : '12px',
+                            borderTopLeftRadius: msg.role === 'model' ? '4px' : '12px',
+                            maxWidth: '90%', fontSize: '14px', lineHeight: '1.5',
+                            color: msg.role === 'user' ? '#e2f6ff' : '#cbd5e1'
+                          }}>
+                            {msg.role === 'user' ? (
+                              msg.content
+                            ) : (
+                              <div className="bmc-ai-markdown">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {msg.content}
+                                </ReactMarkdown>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      }
+                      {chatLoading && (
+                        <div style={{ alignSelf: 'flex-start', background: 'rgba(255, 255, 255, 0.05)', padding: '10px 14px', borderRadius: '12px', borderTopLeftRadius: '4px' }}>
+                          <div className="bmc-chat-send-spinner" style={{ borderColor: 'rgba(255, 255, 255, 0.3)', borderTopColor: '#fff' }} />
+                        </div>
+                      )}
+                    </div>
                   </div>
+                </div>
+
+                <div className="bmc-chat-input-row" style={{ padding: '16px 24px', borderTop: '1px solid rgba(255,255,255,0.05)', background: '#0a0e1a', zIndex: 10 }}>
+                  <input className="bmc-chat-input" placeholder={`Ask about ${selected.title}...`} value={chatQ} onChange={e => setChatQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleChat()} />
+                  <button className="bmc-chat-send" onClick={handleChat} disabled={chatLoading || !chatQ.trim()}>
+                    {chatLoading ? <div className="bmc-chat-send-spinner" /> : <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z" /></svg>}
+                  </button>
                 </div>
               </>
             )}

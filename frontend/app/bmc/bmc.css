@@ -195,6 +195,12 @@
   cursor: pointer; transition: all 0.2s ease;
 }
 .bmc-tool-btn:hover { background: rgba(0, 188, 212, 0.15); color: var(--bmc-accent); }
+.bmc-tool-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.bmc-tool-btn:disabled:hover { background: transparent; color: var(--bmc-text-dim); }
 
 .bmc-tool-divider { width: 20px; height: 1px; background: var(--bmc-border); margin: 4px 0; }
 
@@ -207,7 +213,7 @@
 /* ── Graph Controls ── */
 .bmc-graph-controls {
   position: absolute; bottom: 20px; right: 20px;
-  display: flex; gap: 6px; z-index: 10;
+  display: flex; gap: 6px; z-index: 30;
 }
 
 .bmc-control-btn {
@@ -340,6 +346,8 @@
    SIDE PANEL
    ═══════════════════════════════════════════════════════════ */
 .bmc-panel {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
   width: 360px; min-width: 360px;
   background: var(--bmc-surface);
   backdrop-filter: blur(24px);
@@ -562,4 +570,39 @@
 @keyframes slide-up {
   from { transform: translateX(-50%) translateY(20px); opacity: 0; }
   to { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
+/* ── Custom Scrollbar ── */
+.bmc-panel-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+.bmc-panel-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+.bmc-panel-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+}
+.bmc-panel-scrollable::-webkit-scrollbar-thumb:hover {
+}
+
+/* ── AI Markdown Chat Styling ── */
+.bmc-ai-markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bmc-ai-markdown p {
+  margin: 0;
+}
+.bmc-ai-markdown ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.bmc-ai-markdown li {
+  margin-bottom: 4px;
+}
+.bmc-ai-markdown strong {
+  color: #fff;
+  font-weight: 600;
 }

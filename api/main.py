@@ -75,6 +75,9 @@ from api.tools.bmc import (
     delete_bmc,
     export_bmc_json,
     export_bmc_pdf,
+    init_chat_table,
+    save_chat_history,
+    load_chat_history,
 )
 
 
@@ -109,6 +112,10 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     init_pool()
+    try:
+        init_chat_table()
+    except Exception as e:
+        print(f"[STARTUP] Chat table init warning: {e}")
 
 
 @app.on_event("shutdown")
@@ -1258,6 +1265,13 @@ async def bmc_chat(req: BMCChatRequest):
         agent = get_bmc_agent()
         history_dicts = [{"role": m.role, "content": m.content} for m in req.history] if req.history else []
         answer = agent.chat(req.company, req.node_title, req.node_context, req.question, history=history_dicts)
+        # Auto-save chat history if bmc_id is provided
+        if hasattr(req, 'bmc_id') and req.bmc_id:
+            updated_history = history_dicts + [
+                {"role": "user", "content": req.question},
+                {"role": "model", "content": answer}
+            ]
+            save_chat_history(req.bmc_id, req.node_title, updated_history)
         return BMCChatResponse(answer=answer, node_title=req.node_title, company=req.company)
     except Exception as e:
         print(f"[BMC] Chat error: {e}")
@@ -1268,6 +1282,21 @@ async def bmc_chat(req: BMCChatRequest):
 async def bmc_library():
     """List all saved BMC analyses."""
     return list_library()
+
+
+@app.get("/api/v1/bmc/{bmc_id}/chat/{node_id}")
+async def bmc_chat_history_load(bmc_id: str, node_id: str):
+    """Load saved chat history for a specific BMC node."""
+    messages = load_chat_history(bmc_id, node_id)
+    return {"messages": messages}
+
+
+@app.post("/api/v1/bmc/{bmc_id}/chat/{node_id}")
+async def bmc_chat_history_save(bmc_id: str, node_id: str, body: dict):
+    """Save chat history for a specific BMC node."""
+    messages = body.get("messages", [])
+    save_chat_history(bmc_id, node_id, messages)
+    return {"status": "saved"}
 
 
 @app.get("/api/v1/bmc/{bmc_id}")

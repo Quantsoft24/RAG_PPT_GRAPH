@@ -71,7 +71,7 @@ BMC_SYSTEM_PROMPT = """You are a senior business strategy analyst specializing i
 You analyze companies using the standard 9-block BMC framework developed by Alexander Osterwalder.
 
 For each block, provide:
-1. A concise 2-3 sentence summary of the company's approach
+1. A rigorous bullet-point summary containing numerical data, precise metrics, and hard facts wherever possible. USE MAX 3 BULLET POINTS. Each point MUST start with "• " or "-". Do NOT use paragraph text.
 2. Supporting evidence (specific facts, numbers, products, partnerships)
 3. A confidence score (0.0 to 1.0) based on how well-established this information is
 4. Key strategic insights
@@ -87,7 +87,7 @@ Return a JSON object with this exact structure:
     {{
       "id": "customer_segments",
       "title": "Customer Segments",
-      "summary": "2-3 sentence analysis",
+      "summary": "• First key metric/fact\n• Second key metric\n• Third metric",
       "evidence": ["fact 1", "fact 2", "fact 3"],
       "confidence": 0.85,
       "key_insights": ["insight 1", "insight 2"],
@@ -171,17 +171,20 @@ Return a JSON object with this exact structure:
 Provide detailed, insightful analysis for ALL 9 blocks. Be specific with real facts."""
 
 
-BMC_CHAT_PROMPT_TEMPLATE = """You are a senior business strategy analyst. The user is analyzing the business model of "{company}".
+BMC_CHAT_PROMPT_TEMPLATE = """You are a senior business strategy analyst assisting with Business Model Canvas analysis for "{company}".
 
-They are currently looking at the "{node_title}" block of the Business Model Canvas.
-
-Here is the existing analysis for this block:
+The user is viewing the "{node_title}" block. Existing analysis:
 {node_context}
 
-The user asks: "{question}"
+User message: "{question}"
 
-Provide a helpful, detailed answer focused on this specific BMC block for {company}. 
-Use specific facts and evidence where possible."""
+RESPONSE RULES:
+- If the user sends a casual greeting (hi, hello, hey, etc.), reply with a SHORT friendly greeting (1-2 sentences max). Do NOT dump analysis unprompted.
+- Match the depth of your response to the complexity of the question. Simple question = short answer. Deep question = detailed answer.
+- When providing analysis, use concise bullet points (max 5 bullets). Include numbers and metrics where available.
+- Keep responses focused and scannable. Avoid long paragraphs.
+- Use markdown formatting: **bold** for key terms, bullet points for lists.
+- Maximum response length: 150 words for simple questions, 300 words for complex analytical questions."""
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -685,10 +688,15 @@ def load_bmc(bmc_id: str) -> Optional[Dict[str, Any]]:
         row = cur.fetchone()
         if not row:
             return None
+        bmc_data = row["bmc_data"]
+        if isinstance(bmc_data, str):
+            bmc_data = json.loads(bmc_data)
+        # Inject the DB id into the bmc_data so frontend always has access to it
+        bmc_data["id"] = str(row["id"])
         return {
             "id": str(row["id"]),
             "company_name": row["company_name"],
-            "bmc_data": row["bmc_data"],
+            "bmc_data": bmc_data,
             "overall_confidence": row["overall_confidence"],
             "llm_provider": row["llm_provider"],
             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
@@ -731,6 +739,75 @@ def delete_bmc(bmc_id: str) -> bool:
         cur.execute("DELETE FROM bmc_analyses WHERE id = %s", (bmc_id,))
         conn.commit()
         return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+# ─────────────────────────────────────────────────────────────────
+# CHAT HISTORY PERSISTENCE
+# ─────────────────────────────────────────────────────────────────
+
+def init_chat_table():
+    """Create the bmc_chat_history table if it doesn't exist."""
+    conn = _get_db_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS bmc_chat_history (
+                id SERIAL PRIMARY KEY,
+                bmc_id TEXT NOT NULL,
+                node_id TEXT NOT NULL,
+                messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(bmc_id, node_id)
+            )
+        """)
+        conn.commit()
+        print("[BMC] Chat history table initialized")
+    except Exception as e:
+        print(f"[BMC] Chat table init warning: {e}")
+    finally:
+        conn.close()
+
+
+def save_chat_history(bmc_id: str, node_id: str, messages: List[Dict[str, str]]) -> None:
+    """Save/update chat history for a specific BMC node."""
+    if not bmc_id or not node_id:
+        return
+    conn = _get_db_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO bmc_chat_history (bmc_id, node_id, messages, updated_at)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (bmc_id, node_id)
+            DO UPDATE SET messages = %s, updated_at = CURRENT_TIMESTAMP
+        """, (bmc_id, node_id, json.dumps(messages), json.dumps(messages)))
+        conn.commit()
+    except Exception as e:
+        print(f"[BMC] Save chat history error: {e}")
+    finally:
+        conn.close()
+
+
+def load_chat_history(bmc_id: str, node_id: str) -> List[Dict[str, str]]:
+    """Load chat history for a specific BMC node."""
+    if not bmc_id or not node_id:
+        return []
+    conn = _get_db_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT messages FROM bmc_chat_history WHERE bmc_id = %s AND node_id = %s",
+            (bmc_id, node_id)
+        )
+        row = cur.fetchone()
+        if row and row["messages"]:
+            return row["messages"] if isinstance(row["messages"], list) else json.loads(row["messages"])
+        return []
+    except Exception as e:
+        print(f"[BMC] Load chat history error: {e}")
+        return []
     finally:
         conn.close()
 

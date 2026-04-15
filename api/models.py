@@ -239,6 +239,7 @@ class BMCChatRequest(BaseModel):
     node_context: str = Field("", description="Existing analysis for context")
     question: str = Field(..., min_length=1, max_length=1000, description="Follow-up question")
     history: List[ChatMessage] = Field(default=[], description="Previous conversation messages")
+    bmc_id: Optional[str] = Field(None, description="BMC analysis ID for auto-saving chat history")
 
 
 class BMCChatResponse(BaseModel):
