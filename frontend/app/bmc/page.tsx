@@ -75,7 +75,7 @@ const apiFetch = async (url: string, opts?: RequestInit) => {
   return r.json();
 };
 const apiGenerate = (company: string) => apiFetch(`${API}/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company }) });
-const apiChat = (company: string, t: string, ctx: string, q: string, history: {role:string;content:string}[] = [], bmc_id?: string) => apiFetch(`${API}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company, node_title: t, node_context: ctx, question: q, history, bmc_id }) });
+const apiChat = (company: string, t: string, ctx: string, q: string, history: { role: string; content: string }[] = [], bmc_id?: string) => apiFetch(`${API}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company, node_title: t, node_context: ctx, question: q, history, bmc_id }) });
 const apiLoadChatHistory = (bmcId: string, nodeId: string) => apiFetch(`${API}/${bmcId}/chat/${encodeURIComponent(nodeId)}`).catch(() => ({ messages: [] }));
 const apiLibrary = () => apiFetch(`${API}/library`).catch(() => []);
 const apiLoad = (id: string) => apiFetch(`${API}/${id}`).then(d => {
@@ -531,6 +531,19 @@ export default function BMCPage() {
     ? new Date(bmcData.generated_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : null;
 
+  // handleOnLibraryClick
+  const handleOnLibraryClick = () => {
+    setTab('library');
+    setSearch('');
+  }
+
+  // handleOnHomeClick
+  const handleOnHomeClick = () => {
+    setTab('home');
+    setBmcData(null)
+    setSearch('');
+  }
+
   return (
     <div className="bmc-page">
       {/* ── Top Bar ── */}
@@ -566,8 +579,8 @@ export default function BMCPage() {
 
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
           <div className="bmc-topbar-center">
-            <button className={`bmc-tab ${tab === 'home' ? 'active' : ''}`} onClick={() => setTab('home')}>Home</button>
-            <button className={`bmc-tab ${tab === 'library' ? 'active' : ''}`} onClick={() => setTab('library')}>
+            <button className={`bmc-tab ${tab === 'home' ? 'active' : ''}`} onClick={handleOnHomeClick}>Home</button>
+            <button className={`bmc-tab ${tab === 'library' ? 'active' : ''}`} onClick={handleOnLibraryClick}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
               Library
             </button>
@@ -781,27 +794,27 @@ export default function BMCPage() {
 
                     <div className="bmc-chat-messages" style={{ overflowY: 'visible', padding: '12px 24px', display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px' }}>
                       {chatHistory.length > 0 && chatHistory.map((msg, i) => (
-                          <div key={i} style={{
-                            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                            background: msg.role === 'user' ? 'rgba(0, 188, 212, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                            border: `1px solid ${msg.role === 'user' ? 'rgba(0, 188, 212, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
-                            padding: '10px 14px', borderRadius: '12px',
-                            borderTopRightRadius: msg.role === 'user' ? '4px' : '12px',
-                            borderTopLeftRadius: msg.role === 'model' ? '4px' : '12px',
-                            maxWidth: '90%', fontSize: '14px', lineHeight: '1.5',
-                            color: msg.role === 'user' ? '#e2f6ff' : '#cbd5e1'
-                          }}>
-                            {msg.role === 'user' ? (
-                              msg.content
-                            ) : (
-                              <div className="bmc-ai-markdown">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                  {msg.content}
-                                </ReactMarkdown>
-                              </div>
-                            )}
-                          </div>
-                        ))
+                        <div key={i} style={{
+                          alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                          background: msg.role === 'user' ? 'rgba(0, 188, 212, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                          border: `1px solid ${msg.role === 'user' ? 'rgba(0, 188, 212, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
+                          padding: '10px 14px', borderRadius: '12px',
+                          borderTopRightRadius: msg.role === 'user' ? '4px' : '12px',
+                          borderTopLeftRadius: msg.role === 'model' ? '4px' : '12px',
+                          maxWidth: '90%', fontSize: '14px', lineHeight: '1.5',
+                          color: msg.role === 'user' ? '#e2f6ff' : '#cbd5e1'
+                        }}>
+                          {msg.role === 'user' ? (
+                            msg.content
+                          ) : (
+                            <div className="bmc-ai-markdown">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {msg.content}
+                              </ReactMarkdown>
+                            </div>
+                          )}
+                        </div>
+                      ))
                       }
                       {chatLoading && (
                         <div style={{ alignSelf: 'flex-start', background: 'rgba(255, 255, 255, 0.05)', padding: '10px 14px', borderRadius: '12px', borderTopLeftRadius: '4px' }}>
