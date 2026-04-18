@@ -19,6 +19,7 @@ services:
       dockerfile: Dockerfile.frontend
       args:
         NEXT_PUBLIC_API_URL: http://backend:8000
+        NEXT_PUBLIC_NEWS_API_URL: https://prism.thequantsoft.co.in/news-api
     container_name: prism_frontend
     restart: unless-stopped
     ports:
