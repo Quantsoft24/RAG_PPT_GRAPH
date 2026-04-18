@@ -12,6 +12,9 @@ COPY frontend/ ./
 ARG NEXT_PUBLIC_API_URL=http://backend:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
+ARG NEXT_PUBLIC_NEWS_API_URL=http://34.47.250.116:8001
+ENV NEXT_PUBLIC_NEWS_API_URL=$NEXT_PUBLIC_NEWS_API_URL
+
 RUN npm run build
 
 # Stage 2: Production runner (minimal image)
