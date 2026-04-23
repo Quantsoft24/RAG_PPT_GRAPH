@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { isBookmarked, toggleBookmark } from '../../lib/bookmarks';
 
-const API = process.env.NEXT_PUBLIC_API_URL || '';
+const API = '';
 
 interface Document {
   id: number;
