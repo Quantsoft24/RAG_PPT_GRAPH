@@ -19,8 +19,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -65,5 +65,4 @@ test_results.txt
 *.zip
 docs/
 companies_annual_report_and_results/
-!frontend/lib/
 *.pem
