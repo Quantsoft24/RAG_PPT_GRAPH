@@ -48,6 +48,10 @@ export default function Sidebar() {
             <span className="nav-icon">⚡</span>
             Live Alerts
           </Link>
+          <Link href="/regulatory" className="nav-item">
+            <span className="nav-icon">⚖️</span>
+            Regulatory Intelligence
+          </Link>
           <Link href="/chat" className="nav-item">
             <span className="nav-icon">💬</span>
             SIGMA Chat
