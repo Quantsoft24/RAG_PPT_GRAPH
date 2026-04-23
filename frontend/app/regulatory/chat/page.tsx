@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 
-const API = process.env.NEXT_PUBLIC_API_URL || '';
+const API = '';
 
 interface Message {
   role: 'user' | 'assistant';
