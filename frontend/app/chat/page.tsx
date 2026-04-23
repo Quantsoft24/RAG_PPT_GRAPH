@@ -865,10 +865,12 @@ export default function ChatPage() {
             });
           } else if (status.status === 'error') {
             if (pollingRef.current) clearInterval(pollingRef.current);
+            const rawError: any = status.error || 'Generation failed';
+            const errorMsg = typeof rawError === 'object' ? (rawError.detail || rawError.message || JSON.stringify(rawError)) : String(rawError);
             setAgentPanel({
               type: 'presentation',
               status: 'error',
-              error: status.error || 'Generation failed',
+              error: errorMsg,
               topic: toolData.topic || 'Conversation Summary',
             });
           }
@@ -877,10 +879,12 @@ export default function ChatPage() {
         }
       }, 3000);
     } catch (err: any) {
+      const rawError = err.detail || err.message || err || 'Failed to start generation';
+      const errorMsg = typeof rawError === 'object' ? (rawError.detail || rawError.message || JSON.stringify(rawError)) : String(rawError);
       setAgentPanel({
         type: 'presentation',
         status: 'error',
-        error: err.message || 'Failed to start generation',
+        error: errorMsg,
         topic: toolData.topic || 'Conversation Summary',
       });
     }
@@ -1059,6 +1063,18 @@ export default function ChatPage() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
               </div>
               News Sentiment
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+
+          <button className="new-chat-btn" onClick={() => window.location.href = '/regulatory'} style={{ marginTop: '8px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: 'white' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '28px', height: '28px', background: 'rgba(255,255,255,0.2)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+              </div>
+              Regulatory Intelligence
             </div>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6"></polyline>
