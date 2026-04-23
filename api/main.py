@@ -79,6 +79,8 @@ from api.tools.bmc import (
     save_chat_history,
     load_chat_history,
 )
+from api.sebi_db import init_sebi_pool, close_sebi_pool
+from api.routers.sebi import router as sebi_router
 
 
 # =============================================================================
@@ -92,6 +94,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# Mount SEBI Regulatory Intelligence router
+app.include_router(sebi_router)
 
 # CORS — allow local development + future cloud
 app.add_middleware(
@@ -116,11 +121,16 @@ async def startup():
         init_chat_table()
     except Exception as e:
         print(f"[STARTUP] Chat table init warning: {e}")
+    try:
+        init_sebi_pool()
+    except Exception as e:
+        print(f"[STARTUP] SEBI DB pool init warning: {e}")
 
 
 @app.on_event("shutdown")
 async def shutdown():
     close_pool()
+    close_sebi_pool()
 
 
 # =============================================================================
