@@ -200,25 +200,31 @@ Then type queries like:
 
 ```
 PRISM_ANALYST/
-├── docker-compose.yml          # PostgreSQL + pgAdmin containers
-├── pgadmin_servers.json        # Auto-connects pgAdmin to DB
-├── README.md                   # This file
-├── database/
-│   ├── schema.sql              # Phase 1: 6 tables + indexes
-│   ├── views.sql               # Phase 1: 4 views + search function
-│   ├── migrate_chunks.sql      # Phase 2: chunks table + HNSW index
-│   ├── ingest.py               # Phase 1: data ingestion pipeline
-│   ├── chunker.py              # Phase 2: semantic chunking engine
-│   ├── embedder.py             # Phase 2: embedding generation (Ollama)
-│   ├── search.py               # Phase 2: hybrid search CLI
-│   ├── config.py               # DB config (env-var overridable)
-│   └── requirements.txt        # Python dependencies
-├── companies_annual_report_and_results/
-│   ├── mahindra_.../            # Mahindra annual report + extraction
-│   ├── adani_.../               # Adani annual report + extraction
-│   ├── icici_.../               # ICICI annual report + extraction
-│   └── infosys_.../             # Infosys annual report + extraction
-└── docs/                        # Project documentation
+├── api/                            # FastAPI backend (Python)
+├── frontend/                       # Next.js PRISM web app
+├── thequantsoft/                   # Express.js landing page (thequantsoft.co.in)
+│   ├── components/                 # React JSX components (Nav, Hero, Research, Sections)
+│   ├── styles/tokens.css           # CSS design system
+│   ├── screenshots/                # Design reference images
+│   ├── Home.html                   # Landing page
+│   ├── Prism.html                  # PRISM product page
+│   ├── Labs.html                   # Labs page
+│   ├── Blog.html / BlogPost.html   # Blog pages
+│   ├── Contact.html                # Contact form
+│   ├── Privacy.html / Terms.html   # Legal pages
+│   ├── server.js                   # Express server (serves HTML + /api/contact)
+│   └── package.json
+├── database/                       # DB schema, migrations, ingestion scripts
+├── docker-compose.yml              # Local dev (PostgreSQL + pgAdmin)
+├── docker-compose.prod.yml         # Production (4 services: frontend, backend, landing, nginx)
+├── Dockerfile.frontend             # Next.js standalone build
+├── Dockerfile.backend              # FastAPI with Python deps
+├── Dockerfile.landing              # Express.js landing page
+├── nginx.conf                      # Nginx reverse proxy (domain-based routing + SSL)
+├── .github/workflows/deploy.yml    # CI/CD (auto-deploy on push to production)
+├── .env                            # Secrets (gitignored)
+├── .env.landing                    # Landing page secrets (gitignored)
+└── README.md                       # This file
 ```
 
 ---
@@ -262,20 +268,195 @@ python database/search.py
 
 ---
 
-## 🌐 AWS Migration (Future)
+## 🌐 AWS Production Deployment & CI/CD Guide
 
-Everything is AWS-ready. When deploying to AWS:
+### Production Architecture
 
-1. Replace PostgreSQL container with **Amazon RDS** (PostgreSQL 17 + pgvector)
-2. Set environment variables:
-   ```
-   PRISM_DB_HOST=your-rds-endpoint.amazonaws.com
-   PRISM_DB_PASSWORD=your-production-password
-   ```
-3. PDF storage paths can be swapped to **S3 URLs**
-5. For scale: migrate vector search to **Qdrant** (already specified in tech stack)
+The platform runs on a single **AWS EC2** instance (`t3.medium`, `ap-south-1`) with 4 Docker containers behind an Nginx reverse proxy:
+
+```
+                     ┌──────────────────────────────────────────┐
+                     │        EC2 · 15.207.146.145              │
+                     │                                          │
+ thequantsoft.co.in ─┤    nginx (port 80/443)                   │
+ www.thequantsoft.co.in ─┤    ├── landing   :3002  (Express)    │
+                     │    ├── frontend  :3001  (Next.js)        │
+ prism.thequantsoft  │    ├── backend   :8000  (FastAPI)        │
+   .co.in ───────────┤    └── (SSL via Let's Encrypt)           │
+                     └──────────────────────────────────────────┘
+```
+
+| Domain | Routes To | Container |
+|--------|-----------|-----------|
+| `thequantsoft.co.in` | Landing page | `prism_landing` (Express.js, port 3002) |
+| `www.thequantsoft.co.in` | 301 redirect → `thequantsoft.co.in` | nginx |
+| `prism.thequantsoft.co.in` | PRISM AI app | `prism_frontend` (port 3001) + `prism_backend` (port 8000) |
+
+### Files That Control Deployment
+
+| File | Purpose |
+|------|---------|
+| `docker-compose.prod.yml` | Defines all 4 services (frontend, backend, landing, nginx) |
+| `Dockerfile.frontend` | Next.js standalone build |
+| `Dockerfile.backend` | FastAPI with Python deps |
+| `Dockerfile.landing` | Express.js landing page |
+| `nginx.conf` | Domain-based routing, SSL termination, proxy rules |
+| `.github/workflows/deploy.yml` | CI/CD — auto-deploys on push to `production` branch |
+
+### Environment Files (gitignored — live on server only)
+
+| File | Used By | Key Variables |
+|------|---------|---------------|
+| `.env` | `frontend` + `backend` | API keys, DB credentials, SEBI DB, LLM config |
+| `.env.landing` | `landing` | SMTP credentials, PRISM_APP_URL, company config |
+
+> ⚠️ **These files are gitignored.** They must be manually created on the EC2 server. If the server is rebuilt, you must recreate them.
 
 ---
+
+### Phase 1: GitHub Secrets
+
+Configure in **Settings > Secrets and variables > Actions**:
+
+| Secret Name | Value |
+|---|---|
+| `EC2_HOST` | `15.207.146.145` |
+| `EC2_USERNAME` | `ubuntu` |
+| `EC2_SSH_KEY` | Contents of `prism-analyst.pem` private key |
+
+### Phase 2: Server Provisioning (First-Time Only)
+
+```bash
+# SSH into server
+ssh -i prism-analyst.pem ubuntu@15.207.146.145
+
+# Install Docker, Git, Certbot
+sudo apt update && sudo apt upgrade -y
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker ubuntu && newgrp docker
+sudo apt install -y docker-compose-plugin git certbot
+```
+
+### Phase 3: DNS Configuration
+
+Add these **A Records** in your domain registrar (GoDaddy):
+
+| Type | Name | Data | TTL |
+|------|------|------|-----|
+| A | `prism` | `15.207.146.145` | 600s |
+| A | `@` | `15.207.146.145` | 600s |
+| A | `www` | `15.207.146.145` | 600s |
+
+### Phase 4: SSL Certificates
+
+```bash
+# On the EC2 server
+mkdir -p certbot/www
+
+# PRISM subdomain
+sudo certbot certonly --webroot -w ./certbot/www \
+  -d prism.thequantsoft.co.in \
+  --email praveen.kumar@thequantsoft.co.in --agree-tos
+
+# Landing page root domain
+sudo certbot certonly --webroot -w ./certbot/www \
+  -d thequantsoft.co.in -d www.thequantsoft.co.in \
+  --email praveen.kumar@thequantsoft.co.in --agree-tos
+```
+
+> **Auto-Renewal**: Add to `sudo crontab -e`:
+> ```cron
+> 0 */12 * * * certbot renew --quiet && docker restart prism_nginx
+> ```
+
+### Phase 5: Create Server Environment Files
+
+```bash
+# SSH into server
+ssh -i prism-analyst.pem ubuntu@15.207.146.145
+cd ~/PRISM_ANALYST
+
+# 1. Create .env (for PRISM frontend + backend)
+#    Copy all variables from your local .env, including:
+#    - GEMINI_API_KEY, OPENROUTER_API_KEY
+#    - SEBI_DB_HOST, SEBI_DB_PORT, SEBI_DB_NAME, SEBI_DB_USER, SEBI_DB_PASSWORD
+#    - NEXT_PUBLIC_API_URL, NEXT_PUBLIC_NEWS_API_URL
+nano .env
+
+# 2. Create .env.landing (for landing page)
+cat > .env.landing << 'EOF'
+PORT=3002
+TARGET_EMAIL=praveen.kumar@thequantsoft.co.in
+SMTP_SERVICE=gmail
+SMTP_USER=dhananjayraj75@gmail.com
+SMTP_PASS=<APP_PASSWORD>
+COMPANY_NAME=QUANTSOFT
+LINKEDIN_URL=https://www.linkedin.com/company/quantsoft252
+LINKEDIN_HANDLE=quantsoft252
+PRISM_APP_URL=https://prism.thequantsoft.co.in/chat
+LOCATION_MAIN=India · remote-first
+LOCATION_SEC=Mumbai · Bangalore
+COPYRIGHT_YEAR=2026
+COPYRIGHT_DOMAIN=thequantsoft.co.in
+EOF
+```
+
+### Phase 6: Build & Deploy
+
+```bash
+cd ~/PRISM_ANALYST
+
+# Build all containers
+docker compose -f docker-compose.prod.yml build --no-cache frontend
+docker compose -f docker-compose.prod.yml build backend
+docker compose -f docker-compose.prod.yml build landing
+
+# Start everything
+docker compose -f docker-compose.prod.yml up -d
+
+# Verify all 4 containers are running
+docker compose -f docker-compose.prod.yml ps
+```
+
+### Phase 7: CI/CD Workflow (Automated Deployments)
+
+The project auto-deploys on every push to the `production` branch:
+
+1. Push code to `feat/*` branch
+2. Create PR → `main` → merge
+3. Create PR → `production` → merge
+4. GitHub Actions SSH into EC2, pulls latest, rebuilds, restarts
+
+**Workflow**: `.github/workflows/deploy.yml`
+
+### Phase 8: Monitoring & Maintenance
+
+| Task | Command |
+|---|---|
+| **View Live Logs** | `docker compose -f docker-compose.prod.yml logs -f` |
+| **Logs for One Service** | `docker compose -f docker-compose.prod.yml logs -f landing` |
+| **Check Container Status** | `docker compose -f docker-compose.prod.yml ps` |
+| **Rebuild a Single Service** | `docker compose -f docker-compose.prod.yml build --no-cache landing` |
+| **Restart a Service** | `docker compose -f docker-compose.prod.yml restart landing` |
+| **Clean Disk Space** | `docker image prune -f` |
+| **Check SSL Expiry** | `sudo certbot certificates` |
+
+### Adding a New Feature to Production
+
+```bash
+# 1. Create feature branch
+git checkout -b feat/rk/my-feature
+
+# 2. Make changes, commit, push
+git add . && git commit -m "feat: description" && git push origin feat/rk/my-feature
+
+# 3. Create PR: feat branch → main → merge
+# 4. Create PR: main → production → merge
+# 5. CI/CD auto-deploys. If env vars changed, SSH and update .env on server.
+```
+
+---
+
 
 ## 🤖 AI Model Routing Architecture (RAG Generation)
 
@@ -300,4 +481,4 @@ Different models are assigned to different stages of the pipeline strictly based
     *   **The TPM Requirement**: `Gemini 3.1 Flash Lite` provides a massive 250,000 TPM, allowing it to easily digest large contexts. (`Gemma 4 31B` offers Unlimited TPM).
     *   **The RPD Requirement**: With a generous 500 requests per day, it gracefully handles heavy continuous chat workloads without triggering a `429 Too Many Requests` error, completely side-stepping the artificial limits placed on legacy models like `Gemini 2.5 Flash`.
 
-By adopting this multi-model routing strategy, the system’s daily conversational quota jumps from barely **~6 heavy queries** to **over 500 complex RAG interactions per day**, operating at maximum resilience.
+By adopting this multi-model routing strategy, the system's daily conversational quota jumps from barely **~6 heavy queries** to **over 500 complex RAG interactions per day**, operating at maximum resilience.
