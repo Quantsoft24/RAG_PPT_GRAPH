@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<script src="/config.js"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Contact — Quantsoft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles/tokens.css"/>
+  <script src="/config.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="components/Nav.jsx"></script>
+
+<script type="text/babel">
+const {useState} = React;
+
+function ContactPage() {
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState(null);
+  const [type, setType] = useState("founder");
+  const [form, setForm] = useState({ name: "", email: "", role: "", msg: "" });
+  const types = [
+    {id:"founder", l:"Talk to a founder", d:"Ideas, feedback, deep questions about what we're building."},
+    {id:"work", l:"Work with us", d:"Quants, engineers, designers, data scientists."},
+    {id:"beta", l:"Request Prism beta", d:"Get early access to the AI agent."},
+    {id:"press", l:"Press & media", d:"Interviews, podcast appearances, writeups."},
+  ];
+  return (
+    <section style={{padding:"48px 0 64px"}}>
+      <div className="container">
+        <div style={{display:"grid", gridTemplateColumns:"180px 1fr", gap:40, marginBottom:44}}>
+          <div><span className="eyebrow" style={{borderTop:"1px solid var(--ink)", paddingTop:10, display:"inline-block"}}>Contact</span></div>
+          <div>
+            <h1 className="display" style={{fontSize:"clamp(40px, 5vw, 76px)", margin:"0 0 16px", letterSpacing:"-0.03em", lineHeight:1.05}}>
+              Get in <em style={{fontStyle:"italic", color:"var(--accent)"}}>touch.</em>
+            </h1>
+            <p style={{fontSize:17, color:"var(--ink-2)", maxWidth:640, lineHeight:1.55, margin:0}}>
+              Four ways to reach us. Pick whichever fits.
+            </p>
+          </div>
+        </div>
+
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1.3fr", gap:48, alignItems:"start"}}>
+          <div style={{display:"grid", gap:0, borderTop:"1px solid var(--ink)"}}>
+            {types.map(t=>(
+              <button key={t.id} onClick={()=>{setType(t.id); setSent(false);}}
+                style={{textAlign:"left", padding:"20px 0", borderBottom:"1px solid var(--rule)", cursor:"pointer", opacity: type===t.id?1:0.5, transition:"opacity .2s"}}>
+                <div style={{display:"flex", alignItems:"center", gap:12}}>
+                  <span className="mono" style={{fontSize:11, color:"var(--accent)"}}>{type===t.id?"◆":"◇"}</span>
+                  <div className="display" style={{fontSize:24, letterSpacing:"-0.01em"}}>{t.l}</div>
+                </div>
+                <div style={{color:"var(--muted)", fontSize:14, marginTop:6, marginLeft:24}}>{t.d}</div>
+              </button>
+            ))}
+          </div>
+
+          <div style={{background:"var(--paper)", border:"1px solid var(--rule)", borderRadius:16, padding:32}}>
+            {sent ? (
+              <div style={{padding:"40px 0", textAlign:"center"}}>
+                <div style={{width:72, height:72, borderRadius:"50%", background:"var(--accent-tint)", color:"var(--accent)", display:"grid", placeItems:"center", margin:"0 auto 20px", fontSize:36}}>✓</div>
+                <div className="display" style={{fontSize:32, marginBottom:10}}>Message received.</div>
+                <div style={{color:"var(--muted)"}}>We reply within 48 hours. Usually faster.</div>
+              </div>
+            ) : (
+              <form onSubmit={async (e)=>{
+                e.preventDefault(); 
+                setError(null);
+                const btn = e.target.querySelector('button[type="submit"]');
+                if (btn) { btn.disabled = true; btn.innerText = "Sending..."; }
+                try {
+                  const res = await fetch('/api/contact', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source: types.find(t=>t.id===type).l, ...form })
+                  });
+                  const data = await res.json();
+                  if (res.ok && data.success) {
+                    setSent(true);
+                  } else {
+                    setError(data.message || "Failed to send message.");
+                  }
+                } catch (err) {
+                  console.error(err);
+                  setError("An unexpected error occurred. Please try again.");
+                } finally {
+                  if (btn) { btn.disabled = false; btn.innerHTML = 'Send message <span class="arr">→</span>'; }
+                }
+              }}>
+                <div className="mono" style={{fontSize:11, letterSpacing:"0.08em", textTransform:"uppercase", color:"var(--accent)", marginBottom:20}}>
+                  // {types.find(t=>t.id===type).l}
+                </div>
+                {error && (
+                  <div style={{ background: "var(--red-tint)", color: "var(--red)", padding: "12px 14px", borderRadius: 8, fontSize: 14, marginBottom: 16, border: "1px solid var(--red)" }}>
+                    {error}
+                  </div>
+                )}
+                <div style={{display:"grid", gap:16}}>
+                  <CField label="Your name" v={form.name} onChange={v => setForm({...form, name: v})}/>
+                  <CField label="Email" v={form.email} onChange={v => setForm({...form, email: v})}/>
+                  <CField label="Company / role (optional)" v={form.role} onChange={v => setForm({...form, role: v})}/>
+                  <CField label="Tell us more" v={form.msg} onChange={v => setForm({...form, msg: v})} textarea/>
+                  <button type="submit" className="btn btn-primary" style={{justifyContent:"center", marginTop:6}}>
+                    Send message <span className="arr">→</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+
+        <div style={{marginTop:56, paddingTop:32, borderTop:"1px solid var(--rule)", display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:24}}>
+          {[
+            ["Email", window.QS_CONFIG.EMAIL],
+            ["LinkedIn", window.QS_CONFIG.LINKEDIN_HANDLE],
+            ["Location", window.QS_CONFIG.LOCATION_SEC],
+            ["Response", "< 48 hrs"],
+          ].map(([a,b],i)=>(
+            <div key={i}>
+              <div className="mono" style={{fontSize:11, textTransform:"uppercase", letterSpacing:"0.1em", color:"var(--muted)", marginBottom:8}}>{a}</div>
+              <div style={{fontSize:16, fontWeight:500}}>{b}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CField({label, textarea, v, onChange}) {
+  return (
+    <label style={{display:"grid", gap:6}}>
+      <span className="mono" style={{fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase", color:"var(--muted)"}}>{label}</span>
+      {textarea
+        ? <textarea rows="5" value={v} onChange={e => onChange(e.target.value)} style={{background:"var(--ivory)", border:"1px solid var(--rule)", color:"var(--ink)", padding:"12px 14px", borderRadius:8, fontFamily:"var(--f-sans)", fontSize:15, resize:"vertical"}}/>
+        : <input value={v} onChange={e => onChange(e.target.value)} style={{background:"var(--ivory)", border:"1px solid var(--rule)", color:"var(--ink)", padding:"12px 14px", borderRadius:8, fontFamily:"var(--f-sans)", fontSize:15}}/>}
+    </label>
+  );
+}
+
+function App() { return <><Nav active="contact"/><ContactPage/><Footer/></>; }
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

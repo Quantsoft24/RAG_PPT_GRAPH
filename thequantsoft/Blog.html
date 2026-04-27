@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<script src="/config.js"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Blog — Quantsoft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles/tokens.css"/>
+  <script src="/config.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="components/Nav.jsx"></script>
+
+<script type="text/babel">
+const {useState} = React;
+
+const posts = [
+  {id:1, t:"Why your backtest is lying to you", sub:"Survivorship bias, look-ahead and the five other ways backtests sell fantasies.", d:"Mar 14, 2026", r:"12 min", c:"Research", a:"Arjun Mehta", bg:"var(--indigo)"},
+  {id:2, t:"Momentum in Nifty 500: a 20-year study", sub:"We ran every flavor of momentum on Indian large + mid caps. Here's what actually worked.", d:"Feb 28, 2026", r:"18 min", c:"Factors", a:"Rohan Desai", bg:"var(--ink)"},
+  {id:3, t:"What F&O retail really pays for", sub:"SEBI says 90% of retail F&O loses money. We looked at the microstructure to understand why.", d:"Feb 11, 2026", r:"15 min", c:"Market structure", a:"Priya Iyer", bg:"var(--accent)"},
+  {id:4, t:"Building Prism: designing an AI for Indian markets", sub:"A technical look at how Prism handles Indian corporate actions, symbol mapping and regime shifts.", d:"Jan 30, 2026", r:"22 min", c:"Engineering", a:"Shreya Nair", bg:"var(--green)"},
+  {id:5, t:"Risk management for a ₹5L portfolio", sub:"Position sizing, drawdown budgets and why Kelly is dangerous for retail.", d:"Jan 18, 2026", r:"10 min", c:"Risk", a:"Arjun Mehta", bg:"var(--ink-2)"},
+  {id:6, t:"The case against stock tips", sub:"Survivor stats, base rates, and what information asymmetry actually looks like on WhatsApp.", d:"Jan 04, 2026", r:"8 min", c:"Behaviour", a:"Priya Iyer", bg:"var(--indigo-2)"},
+];
+
+function TileArt({bg, n}) {
+  return (
+    <div style={{position:"relative", aspectRatio:"16/10", background:bg, overflow:"hidden"}}>
+      <svg viewBox="0 0 400 250" style={{position:"absolute", inset:0, width:"100%", height:"100%", opacity:0.28}}>
+        {n === 0 && [...Array(8)].map((_,i)=><path key={i} d={`M0,${180-i*15} Q100,${160-i*15} 200,${140-i*15} T400,${100-i*15}`} fill="none" stroke="#fff" strokeWidth="1"/>)}
+        {n === 1 && [...Array(25)].map((_,i)=><rect key={i} x={(i%5)*80} y={Math.floor(i/5)*50} width="78" height="48" fill={i%3===0?"#fff":"none"} stroke="#fff" fillOpacity={0.1+Math.random()*0.3}/>)}
+        {n === 2 && [...Array(12)].map((_,i)=><circle key={i} cx={Math.random()*400} cy={Math.random()*250} r={Math.random()*40+10} fill="none" stroke="#fff"/>)}
+        {n === 3 && <g>{[...Array(20)].map((_,i)=><line key={i} x1={0} x2={400} y1={i*13} y2={i*13+30} stroke="#fff"/>)}</g>}
+        {n === 4 && [...Array(6)].map((_,i)=><path key={i} d={`M0,${250-i*30} L${i*60+60},${250-i*30} L${i*60+60},${200-i*25}`} fill="none" stroke="#fff" strokeWidth="1.5"/>)}
+        {n === 5 && [...Array(15)].map((_,i)=><g key={i}><circle cx={50+i*25} cy={125+Math.sin(i)*40} r="4" fill="#fff"/><line x1={50+i*25} x2={75+(i+1)*25} y1={125+Math.sin(i)*40} y2={125+Math.sin(i+1)*40} stroke="#fff"/></g>)}
+      </svg>
+    </div>
+  );
+}
+
+function Card({p, i, featured}) {
+  const [h,sh] = useState(false);
+  return (
+    <a href={`BlogPost.html?id=${p.id}`} onMouseEnter={()=>sh(true)} onMouseLeave={()=>sh(false)}
+      style={{display:"block", borderRadius:14, overflow:"hidden", border:"1px solid var(--rule)", background:"var(--paper)", transition:"box-shadow .3s, border-color .3s", boxShadow: h?"var(--shadow-md)":"none", borderColor: h?"var(--ink)":"var(--rule)"}}>
+      <TileArt bg={p.bg} n={i}/>
+      <div style={{padding: featured?"32px":"22px"}}>
+        <div style={{display:"flex", gap:12, alignItems:"center", marginBottom:14}}>
+          <span className="chip">{p.c}</span>
+          <span className="mono" style={{fontSize:11, color:"var(--muted)"}}>{p.d} · {p.r}</span>
+        </div>
+        <div className="display" style={{fontSize: featured?40:22, letterSpacing:"-0.02em", lineHeight:1.1, marginBottom:10}}>{p.t}</div>
+        <p style={{color:"var(--muted)", fontSize:14, margin:0, lineHeight:1.55}}>{p.sub}</p>
+        <div style={{marginTop:18, display:"flex", alignItems:"center", gap:10}}>
+          <div style={{width:26, height:26, borderRadius:"50%", background:"var(--ink)", color:"var(--ivory)", display:"grid", placeItems:"center", fontFamily:"var(--f-mono)", fontSize:10, fontWeight:600}}>{p.a.split(" ").map(x=>x[0]).join("")}</div>
+          <div className="mono" style={{fontSize:11, color:"var(--muted)"}}>{p.a}</div>
+        </div>
+      </div>
+    </a>
+  );
+}
+
+function BlogIndex() {
+  const [cat, setCat] = useState("All");
+  const cats = ["All","Research","Factors","Market structure","Engineering","Risk","Behaviour"];
+  const filtered = cat==="All"?posts:posts.filter(p=>p.c===cat);
+  return (
+    <>
+      <section style={{padding:"48px 0 24px"}}>
+        <div className="container">
+          <div style={{display:"grid", gridTemplateColumns:"180px 1fr", gap:40}}>
+            <div><span className="eyebrow" style={{borderTop:"1px solid var(--ink)", paddingTop:10, display:"inline-block"}}>Journal</span></div>
+            <div>
+              <h1 className="display" style={{fontSize:"clamp(40px, 5vw, 72px)", margin:"0 0 16px", letterSpacing:"-0.03em", lineHeight:1.05}}>
+                Notes from the <em style={{fontStyle:"italic", color:"var(--accent)"}}>desk.</em>
+              </h1>
+              <p style={{fontSize:17, color:"var(--ink-2)", maxWidth:640, lineHeight:1.55, margin:0}}>
+                Research, engineering and market structure — written by the Quantsoft team.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section style={{paddingTop:0, paddingBottom: 64}}>
+        <div className="container">
+          <div style={{display:"flex", gap:8, flexWrap:"wrap", marginBottom:28, paddingBottom:16, borderBottom:"1px solid var(--rule)"}}>
+            {cats.map(c=>(
+              <button key={c} onClick={()=>setCat(c)} className="chip" style={{
+                background: cat===c?"var(--ink)":"var(--paper)",
+                color: cat===c?"var(--ivory)":"var(--muted)",
+                borderColor: cat===c?"var(--ink)":"var(--rule)",
+                cursor:"pointer", padding:"8px 14px",
+              }}>{c}</button>
+            ))}
+          </div>
+          {cat==="All" && <div style={{marginBottom:32}}><Card p={filtered[0]} i={0} featured/></div>}
+          <div style={{display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:24}}>
+            {(cat==="All"?filtered.slice(1):filtered).map((p,i)=><Card key={p.id} p={p} i={(cat==="All"?i+1:posts.indexOf(p))}/>)}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function App() { return <><Nav active="blog"/><BlogIndex/><Footer/></>; }
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

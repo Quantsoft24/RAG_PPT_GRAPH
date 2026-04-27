@@ -1,5 +1,6 @@
 # Environments
 .env
+.env.landing
 .venv
 env/
 venv/
@@ -33,6 +34,7 @@ MANIFEST
 
 # Next.js / Node
 frontend/node_modules/
+thequantsoft/node_modules/
 node_modules/
 npm-debug.log*
 yarn-debug.log*
