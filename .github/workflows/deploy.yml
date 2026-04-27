@@ -29,6 +29,7 @@ jobs:
             echo "🔨 Building Docker images..."
             docker compose -f docker-compose.prod.yml build --no-cache frontend
             docker compose -f docker-compose.prod.yml build backend
+            docker compose -f docker-compose.prod.yml build landing
 
             echo "🚀 Restarting services..."
             docker compose -f docker-compose.prod.yml up -d

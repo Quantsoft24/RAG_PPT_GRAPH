@@ -27,6 +27,16 @@ services:
     depends_on:
       - backend
 
+  landing:
+    build:
+      context: .
+      dockerfile: Dockerfile.landing
+    container_name: prism_landing
+    restart: unless-stopped
+    env_file: .env.landing
+    ports:
+      - "3002:3002"
+
   nginx:
     image: nginx:alpine
     container_name: prism_nginx
@@ -41,3 +51,4 @@ services:
     depends_on:
       - frontend
       - backend
+      - landing

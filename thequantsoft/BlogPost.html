@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<script src="/config.js"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Why your backtest is lying to you — Quantsoft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles/tokens.css"/>
+  <script src="/config.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="components/Nav.jsx"></script>
+
+<script type="text/babel">
+const {useEffect, useState} = React;
+
+function Progress() {
+  const [p,setP] = useState(0);
+  useEffect(()=>{
+    const h = ()=>{
+      const s = document.documentElement.scrollTop;
+      const m = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      setP(m>0?s/m*100:0);
+    };
+    window.addEventListener("scroll",h); return ()=>window.removeEventListener("scroll",h);
+  },[]);
+  return <div style={{position:"fixed", top:64, left:0, height:2, width:`${p}%`, background:"var(--accent)", zIndex:100, transition:"width .1s"}}/>;
+}
+
+function Hero() {
+  return (
+    <section style={{padding:"100px 0 60px", borderBottom:"1px solid var(--rule)"}}>
+      <div className="container">
+        <div style={{maxWidth:820, margin:"0 auto"}}>
+          <div style={{display:"flex", gap:12, alignItems:"center", marginBottom:24}}>
+            <span className="chip">Research</span>
+            <span className="mono" style={{fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.1em"}}>Mar 14, 2026 · 12 min read</span>
+          </div>
+          <h1 className="display" style={{fontSize:"clamp(44px, 5.5vw, 76px)", margin:"0 0 24px", letterSpacing:"-0.025em", lineHeight:1.05}}>
+            Why your backtest is lying to you.
+          </h1>
+          <p style={{fontSize:22, color:"var(--ink-2)", lineHeight:1.5, margin:0}}>
+            Survivorship bias, look-ahead, overfitting — and the five other ways a clean equity curve sells you a fantasy.
+          </p>
+          <div style={{display:"flex", alignItems:"center", gap:14, marginTop:40, paddingTop:24, borderTop:"1px solid var(--rule)"}}>
+            <div style={{width:44, height:44, borderRadius:"50%", background:"var(--indigo)", color:"var(--ivory)", display:"grid", placeItems:"center", fontFamily:"var(--f-mono)", fontWeight:600, fontSize:14}}>AM</div>
+            <div>
+              <div style={{fontWeight:600, fontSize:15}}>Arjun Mehta</div>
+              <div className="mono" style={{fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em"}}>Co-founder · Research</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Article() {
+  return (
+    <article style={{padding:"80px 0"}}>
+      <div className="container">
+        <div style={{display:"grid", gridTemplateColumns:"1fr 720px 1fr", gap:40}}>
+          <aside style={{position:"sticky", top:100, alignSelf:"start", paddingTop:10}}>
+            <div className="eyebrow" style={{marginBottom:14}}>Contents</div>
+            <div style={{display:"grid", gap:10}}>
+              {["1. Survivorship","2. Look-ahead","3. Overfitting","4. Regime change","5. Transaction costs","6. The fix"].map((s,i)=>(
+                <a key={i} href={`#s${i}`} className="mono" style={{fontSize:12, color:"var(--muted)", padding:"4px 0", borderLeft:"2px solid var(--rule)", paddingLeft:12}}>{s}</a>
+              ))}
+            </div>
+          </aside>
+
+          <div style={{fontSize:18, lineHeight:1.7, color:"var(--ink-2)"}}>
+            <p style={{fontSize:22, color:"var(--ink)", fontFamily:"var(--f-display)", lineHeight:1.4, letterSpacing:"-0.005em"}}>
+              Every quant begins the same way. A clean Sharpe of 2.4, a drawdown of -6%, an equity curve that bends upward like it was drawn by hand. Then you trade it live. And it dies.
+            </p>
+
+            <h2 id="s0" className="display" style={{fontSize:34, margin:"48px 0 16px", color:"var(--ink)"}}>1. Survivorship bias</h2>
+            <p>The stocks in your universe today are, by definition, the ones that survived. BHEL was a Nifty name once. So was Reliance Communications. If you're backtesting 2015–2025 on today's Nifty 50, you've silently dropped every company that got delisted, merged or fell out of the index — and those were precisely the worst performers.</p>
+
+            <figure style={{margin:"32px 0", padding:"32px", background:"var(--paper)", border:"1px solid var(--rule)", borderRadius:14}}>
+              <svg viewBox="0 0 600 260" style={{width:"100%"}}>
+                <text x="0" y="20" fontFamily="var(--f-mono)" fontSize="11" fill="var(--muted)">DECILE RETURNS · 2015–2025 · WITH vs WITHOUT SURVIVORSHIP</text>
+                {[0.82, 0.71, 0.65, 0.58, 0.52, 0.47, 0.41, 0.33, 0.25, 0.12].map((v,i)=>(
+                  <g key={i}>
+                    <rect x={40+i*55} y={40+(1-v)*140} width="22" height={v*140} fill="var(--indigo)"/>
+                    <rect x={66+i*55} y={40+(1-v*0.55)*140} width="22" height={v*0.55*140} fill="var(--accent)"/>
+                    <text x={51+i*55} y={210} textAnchor="middle" fontSize="10" fontFamily="var(--f-mono)" fill="var(--muted)">D{i+1}</text>
+                  </g>
+                ))}
+                <g transform="translate(40, 230)" fontFamily="var(--f-mono)" fontSize="11">
+                  <rect width="10" height="10" fill="var(--indigo)"/><text x="16" y="9" fill="var(--ink-2)">Biased backtest</text>
+                  <rect x="150" width="10" height="10" fill="var(--accent)"/><text x="166" y="9" fill="var(--ink-2)">Realistic (point-in-time)</text>
+                </g>
+              </svg>
+              <figcaption className="mono" style={{fontSize:11, color:"var(--muted)", marginTop:16, textTransform:"uppercase", letterSpacing:"0.08em"}}>
+                Fig 1. The "momentum premium" shrinks by ~45% once you include delisted names.
+              </figcaption>
+            </figure>
+
+            <h2 id="s1" className="display" style={{fontSize:34, margin:"48px 0 16px", color:"var(--ink)"}}>2. Look-ahead bias</h2>
+            <p>You know a quarterly earnings number at 6pm on the announcement date, not on the first of the month. If your database stamps financial data by period-end instead of publication date, you're trading on information you couldn't possibly have had. This is the single easiest way to produce a fictional 3.0 Sharpe.</p>
+
+            <blockquote style={{margin:"32px 0", padding:"24px 28px", borderLeft:"3px solid var(--accent)", background:"var(--paper)", fontSize:22, fontFamily:"var(--f-display)", letterSpacing:"-0.005em", lineHeight:1.4, color:"var(--ink)"}}>
+              "The first backtest is a hypothesis. The hundredth backtest is overfitting. Somewhere between them, you're doing science."
+            </blockquote>
+
+            <h2 id="s2" className="display" style={{fontSize:34, margin:"48px 0 16px", color:"var(--ink)"}}>3. Overfitting</h2>
+            <p>Given enough parameters, any curve can be made to fit any history. If you test 200 variants of a strategy and pick the best one, the expected out-of-sample degradation is close to 100%. Walk-forward validation and strict holdouts are not optional — they're the only thing standing between research and narrative.</p>
+
+            <h2 id="s3" className="display" style={{fontSize:34, margin:"48px 0 16px", color:"var(--ink)"}}>4. Regime change</h2>
+            <p>Indian markets from 2003–2008 look nothing like 2013–2018, which look nothing like 2021–2026. Volatility regimes, liquidity regimes, retail-vs-FII flow regimes — they shift. A strategy that survived one regime and died in the next was never alpha; it was exposure.</p>
+
+            <h2 id="s4" className="display" style={{fontSize:34, margin:"48px 0 16px", color:"var(--ink)"}}>5. Transaction costs</h2>
+            <p>Brokerage of ₹20 per order feels like a rounding error, until your strategy rebalances weekly across 40 names. Then add STT, stamp duty, exchange charges, slippage (the bid-ask you actually cross, not the mid), and the market impact of your own order. On a ₹10L book, casual estimates can be 3–5% a year — enough to erase most retail strategies.</p>
+
+            <h2 id="s5" className="display" style={{fontSize:34, margin:"48px 0 16px", color:"var(--ink)"}}>6. The fix</h2>
+            <p>Build your data pipeline with point-in-time discipline. Validate every strategy on data you haven't seen. Model costs honestly. Expect your real Sharpe to be a third of your backtest Sharpe — and be delighted when it's half.</p>
+            <p>This is the work. It is slower, less flattering, and far more useful than a clean equity curve.</p>
+          </div>
+
+          <div style={{paddingTop:10}}>
+            <div className="eyebrow" style={{marginBottom:14}}>Share</div>
+            <div style={{display:"grid", gap:8}}>
+              {["Copy link","LinkedIn","X / Twitter","Email"].map(s=>(
+                <button key={s} className="mono" style={{fontSize:12, textAlign:"left", padding:"8px 0", color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", borderBottom:"1px solid var(--rule)"}}>{s} →</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function More() {
+  return (
+    <section style={{borderTop:"1px solid var(--rule)", background:"var(--paper)"}}>
+      <div className="container">
+        <div className="section-head">
+          <div><span className="eyebrow">Keep reading</span></div>
+          <h2>More from the desk.</h2>
+        </div>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:24}}>
+          {[
+            ["Momentum in Nifty 500: a 20-year study","Factors","Feb 28, 2026"],
+            ["What F&O retail really pays for","Market structure","Feb 11, 2026"],
+            ["Building Prism: designing an AI for Indian markets","Engineering","Jan 30, 2026"],
+          ].map(([t,c,d],i)=>(
+            <a key={i} href="Blog.html" className="card" style={{display:"block"}}>
+              <div style={{height:120, background:["var(--indigo)","var(--ink)","var(--accent)"][i], borderRadius:8, marginBottom:18}}/>
+              <span className="chip" style={{marginBottom:12}}>{c}</span>
+              <div className="display" style={{fontSize:22, letterSpacing:"-0.01em", lineHeight:1.2, marginTop:10}}>{t}</div>
+              <div className="mono" style={{fontSize:11, color:"var(--muted)", marginTop:14, textTransform:"uppercase", letterSpacing:"0.08em"}}>{d}</div>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function App() { return <><Nav active="blog"/><Progress/><Hero/><Article/><More/><Footer/></>; }
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

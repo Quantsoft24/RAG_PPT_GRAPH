@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<script src="/config.js"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>PRISM — AI Intelligence for Financial Research · Quantsoft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles/tokens.css"/>
+  <script src="/config.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="components/Nav.jsx"></script>
+
+<script type="text/babel">
+const {useState} = React;
+
+function PrismHero() {
+  return (
+    <section style={{padding:"56px 0 64px", position:"relative", overflow:"hidden", background: "linear-gradient(180deg, var(--ivory), var(--paper))"}}>
+      <div className="container">
+        <div style={{display:"grid", gridTemplateColumns:"200px 1fr", gap:40}}>
+          <div><span className="eyebrow" style={{borderTop:"1px solid var(--ink)", paddingTop:10, display:"inline-block"}}>PRISM · Current Product</span></div>
+          <div style={{maxWidth:960}}>
+            <div className="chip" style={{marginBottom:24}}><span className="dot"/>In active development</div>
+            <h1 className="display" style={{fontSize:"clamp(52px, 7vw, 104px)", margin:"0 0 24px", letterSpacing:"-0.03em"}}>
+              An intelligence<br/>layer for financial<br/><em style={{fontStyle:"italic", color:"var(--accent)"}}>research.</em>
+            </h1>
+            <p style={{fontSize:20, color:"var(--ink-2)", maxWidth:760, lineHeight:1.5}}>
+              PRISM is built to reduce the operational burden across institutional financial analysis. It assists with filing analysis, KPI extraction, sector tracking, business model understanding, regulatory monitoring, and research workflow automation.
+            </p>
+            <div style={{display:"flex", gap:12, marginTop:32, flexWrap:"wrap"}}>
+              <a className="btn btn-primary" href={window.QS_CONFIG.PRISM_APP_URL}>Launch PRISM <span className="arr">→</span></a>
+              <a className="btn btn-ghost" href="#capabilities">Capabilities</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Capabilities() {
+  const caps = [
+    ["Filing analysis", "Annual reports, quarterly filings, presentations, regulatory disclosures — parsed, indexed, and made queryable."],
+    ["KPI extraction", "Pull structured financial metrics from large documents — revenue, margin trees, segment splits, capex schedules."],
+    ["Sector tracking", "Monitor companies, industries, competitors, and regulatory updates with continuously refreshed context."],
+    ["Business understanding", "Explain unfamiliar businesses — value chains, revenue models, competitive positioning, key risks."],
+    ["Regulatory monitoring", "Track filings and disclosures across exchanges, regulators, and corporate channels."],
+    ["Workflow automation", "Notes, summaries, retrieval and synthesis — across your entire research corpus."],
+  ];
+  return (
+    <section id="capabilities" style={{borderTop:"1px solid var(--rule)", background:"var(--paper)"}}>
+      <div className="container">
+        <div className="section-head">
+          <div><span className="eyebrow">Capabilities</span></div>
+          <h2>What PRISM does.</h2>
+        </div>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:0, borderTop:"1px solid var(--ink)"}}>
+          {caps.map(([t,b],i)=>(
+            <div key={i} style={{padding:"32px 24px 36px", borderRight: (i%3<2)?"1px solid var(--rule)":"none", borderBottom:"1px solid var(--rule)"}}>
+              <div className="mono" style={{fontSize:11, color:"var(--accent)", marginBottom:14}}>0{i+1}</div>
+              <div className="display" style={{fontSize:24, letterSpacing:"-0.01em", marginBottom:12}}>{t}</div>
+              <p style={{color:"var(--muted)", fontSize:14, margin:0, lineHeight:1.6}}>{b}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Principles() {
+  const ps = [
+    ["Source-linked", "Every output traces back to its origin document, page, and passage."],
+    ["Production-grade", "Built with reliability, security, and operational rigor expected by institutional teams."],
+    ["Domain-aware", "Designed around real financial workflows — not generic chat patterns."],
+    ["Operator-controlled", "PRISM assists; the analyst remains in command of every decision."],
+  ];
+  return (
+    <section style={{background:"var(--ink)", color:"var(--ivory)", borderTop:"1px solid var(--ink)"}}>
+      <div className="container">
+        <div className="section-head" style={{color:"var(--ivory)"}}>
+          <div><span className="eyebrow" style={{color:"var(--muted-2)"}}>Engineering principles</span></div>
+          <h2 style={{color:"var(--ivory)"}}>Built for serious work.</h2>
+        </div>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:0, borderTop:"1px solid var(--ink-3)"}}>
+          {ps.map(([t,d],i)=>(
+            <div key={i} style={{padding:"32px 28px", borderRight: i%2===0?"1px solid var(--ink-3)":"none", borderBottom:"1px solid var(--ink-3)"}}>
+              <div className="mono" style={{fontSize:11, color:"var(--accent)", marginBottom:14}}>0{i+1}</div>
+              <div className="display" style={{fontSize:28, color:"var(--ivory)", marginBottom:12, letterSpacing:"-0.02em"}}>{t}</div>
+              <div style={{color:"var(--muted-2)", fontSize:15, lineHeight:1.6}}>{d}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PrismCTA() {
+  return (
+    <section style={{textAlign:"center", padding:"120px 0", borderTop:"1px solid var(--rule)"}}>
+      <div className="container">
+        <h2 className="display" style={{fontSize:"clamp(40px, 6vw, 80px)", margin:"0 0 24px", letterSpacing:"-0.03em"}}>
+          Ready when you are.
+        </h2>
+        <p style={{color:"var(--muted)", fontSize:18, maxWidth:560, margin:"0 auto 36px"}}>
+          PRISM is in active development. Reach out to discuss access or partnership.
+        </p>
+        <a className="btn btn-primary" href={window.QS_CONFIG.PRISM_APP_URL}>
+          Launch PRISM <span className="arr">→</span>
+        </a>
+      </div>
+    </section>
+  );
+}
+
+/* ---------------- LIVE NEWSROOM ---------------- */
+function LiveNewsroom() {
+  const SOURCES = ["Reuters", "Bloomberg", "Mint", "ET Markets", "Moneycontrol", "BSE", "NSE", "SEBI", "Business Standard", "CNBC-TV18", "Financial Times"];
+  const SECTORS = ["All", "Banking", "Tech", "Auto", "Pharma", "Energy", "FMCG", "Metals", "Realty"];
+  const SEED = [
+    { co: "HDFC Bank",       sector: "Banking",  head: "Q4 net profit beats estimates on NII expansion; deposits up 14% YoY", src: "Reuters",         tag: "RESULTS" },
+    { co: "Infosys",         sector: "Tech",     head: "FY27 revenue guidance revised to 4–6%; margin band held at 20–22%",      src: "Bloomberg",       tag: "GUIDANCE" },
+    { co: "Reliance Inds.",  sector: "Energy",   head: "Jio AI capex roadmap detailed at AGM; ₹75,000 Cr earmarked over 3 years", src: "Mint",            tag: "CAPEX" },
+    { co: "Sun Pharma",      sector: "Pharma",   head: "USFDA grants tentative approval for oncology generic at Halol facility",  src: "ET Markets",      tag: "REGULATORY" },
+    { co: "Tata Motors",     sector: "Auto",     head: "JLR posts record quarterly EBIT; demerger timeline confirmed for Q3",     src: "Moneycontrol",    tag: "RESULTS" },
+    { co: "ITC",             sector: "FMCG",     head: "Hotels demerger record date set; cigarette volume growth steady at 4%",   src: "Business Standard", tag: "CORP-ACTION" },
+    { co: "Tata Steel",      sector: "Metals",   head: "Netherlands restructuring complete; Q1 EBITDA per tonne improves QoQ",    src: "Reuters",         tag: "OPERATIONS" },
+    { co: "DLF",             sector: "Realty",   head: "Pre-sales for FY26 cross ₹22,000 Cr guidance on luxury launches",         src: "Mint",            tag: "PRE-SALES" },
+    { co: "TCS",             sector: "Tech",     head: "BSNL deal book accretive to FY27 margins; deal TCV at $14.2bn",           src: "CNBC-TV18",       tag: "DEAL-WIN" },
+    { co: "ICICI Bank",      sector: "Banking",  head: "Asset quality stable; GNPA at 1.94%, credit cost guidance retained",      src: "Bloomberg",       tag: "RESULTS" },
+    { co: "Adani Ports",     sector: "Energy",   head: "Cargo volume up 11% YoY in Q4; FY27 guidance raised to 460 MMT",          src: "ET Markets",      tag: "OPERATIONS" },
+    { co: "Maruti Suzuki",   sector: "Auto",     head: "Hybrid lineup expansion announced; FY27 capex pegged at ₹9,500 Cr",       src: "Moneycontrol",    tag: "STRATEGY" },
+    { co: "SEBI",            sector: "Banking",  head: "New disclosure norms for index funds; effective from Q2 FY27",            src: "SEBI",            tag: "REGULATORY" },
+    { co: "Cipla",           sector: "Pharma",   head: "US biosimilars portfolio launch on track; respiratory pipeline expanded", src: "Financial Times", tag: "PIPELINE" },
+    { co: "Hindalco",        sector: "Metals",   head: "Novelis IPO timeline pushed; aluminium realizations up 6% sequentially",  src: "Reuters",         tag: "CAPITAL" },
+    { co: "Nestle India",    sector: "FMCG",     head: "Volume growth recovers to 5%; rural demand inflects positively",          src: "Business Standard", tag: "DEMAND" },
+    { co: "Wipro",           sector: "Tech",     head: "AI services unit crosses $500m run-rate; Capco acquisition synergy plays out", src: "Bloomberg",     tag: "STRATEGY" },
+    { co: "ONGC",            sector: "Energy",   head: "KG Basin production ramp-up nears peak; FY27 oil output guided +8%",      src: "Mint",            tag: "OPERATIONS" },
+  ];
+
+  // Build a live-looking feed: assign a relative timestamp (seconds ago, growing).
+  const baseTime = React.useMemo(() => Date.now(), []);
+  const [tick, setTick] = useState(0);
+  const [filter, setFilter] = useState("All");
+  const [pinned, setPinned] = useState(0);
+
+  React.useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 2400);
+    return () => clearInterval(id);
+  }, []);
+
+  // Rotate headlines: pinned cycles every tick to simulate "instant news"
+  React.useEffect(() => {
+    setPinned(p => (p + 1) % SEED.length);
+  }, [tick]);
+
+  const items = SEED.map((it, i) => {
+    const ageSec = ((i + tick * 1) % SEED.length) * 47 + 12; // 12s..~14m
+    return { ...it, ageSec, idx: i };
+  }).sort((a, b) => a.ageSec - b.ageSec);
+
+  const filtered = filter === "All" ? items : items.filter(it => it.sector === filter);
+  const top = filtered[0];
+
+  const fmtAge = (s) => s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s/60)}m ago` : `${Math.floor(s/3600)}h ago`;
+  const nowStr = new Date(baseTime + tick * 2400).toLocaleTimeString("en-IN", { hour12: false });
+
+  return (
+    <section id="newsroom" style={{ borderTop: "1px solid var(--rule)", background: "var(--ivory)" }}>
+      <div className="container">
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">Live newsroom</span>
+          </div>
+          <h2>Every filing, every wire,<br/>in one place.</h2>
+        </div>
+
+        <p style={{ fontSize: 18, color: "var(--ink-2)", maxWidth: 720, lineHeight: 1.5, marginTop: -16, marginBottom: 36 }}>
+          PRISM continuously ingests news and disclosures from leading Indian and global publications, exchanges, and regulators — and routes them to the right company, sector, and analyst the moment they break.
+        </p>
+
+        {/* Source row */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 0, borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)", padding: "14px 0", marginBottom: 28, alignItems: "center" }}>
+          <span className="mono" style={{ fontSize: 11, color: "var(--muted)", marginRight: 16 }}>SOURCES</span>
+          {SOURCES.map((s, i) => (
+            <span key={i} className="mono" style={{ fontSize: 12, color: "var(--ink-2)", padding: "0 14px", borderLeft: i === 0 ? "none" : "1px solid var(--rule)" }}>
+              {s}
+            </span>
+          ))}
+        </div>
+
+        {/* The terminal */}
+        <div style={{ border: "1px solid var(--rule)", borderRadius: 14, background: "var(--paper)", overflow: "hidden", boxShadow: "var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.04))" }}>
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", borderBottom: "1px solid var(--rule)", background: "var(--ivory)" }}>
+            <div style={{ display: "flex", gap: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#D9D4C7" }}/>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#D9D4C7" }}/>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#D9D4C7" }}/>
+            </div>
+            <div className="mono" style={{ fontSize: 11, color: "var(--muted)", marginLeft: 10 }}>prism / newsroom · live</div>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 14, alignItems: "center" }}>
+              <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>IST {nowStr}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--f-mono)", fontSize: 11, color: "var(--green)" }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 0 0 var(--green)", animation: "pulseDot 1.4s ease-out infinite" }}/>
+                LIVE
+              </span>
+            </div>
+          </div>
+
+          {/* Filter chips */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "14px 18px", borderBottom: "1px solid var(--rule)" }}>
+            {SECTORS.map(s => {
+              const on = s === filter;
+              return (
+                <button key={s} onClick={() => setFilter(s)} style={{
+                  fontFamily: "var(--f-mono)", fontSize: 11, letterSpacing: "0.04em",
+                  padding: "6px 12px", borderRadius: 999,
+                  border: `1px solid ${on ? "var(--ink)" : "var(--rule)"}`,
+                  background: on ? "var(--ink)" : "transparent",
+                  color: on ? "var(--ivory)" : "var(--ink-2)",
+                  cursor: "pointer", textTransform: "uppercase",
+                }}>{s}</button>
+              );
+            })}
+            <span style={{ marginLeft: "auto", fontFamily: "var(--f-mono)", fontSize: 11, color: "var(--muted)" }}>
+              {filtered.length} headlines · auto-refresh on
+            </span>
+          </div>
+
+          {/* Body grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", minHeight: 460 }}>
+            {/* Left: top headline + ticker list */}
+            <div style={{ borderRight: "1px solid var(--rule)" }}>
+              {/* Top headline (rotates) */}
+              {top && (
+                <div key={top.idx} style={{ padding: "26px 24px 24px", borderBottom: "1px solid var(--rule)", animation: "newsIn 500ms ease-out both" }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
+                    <span className="chip" style={{ background: "var(--accent)", color: "#fff", border: "none", fontFamily: "var(--f-mono)", fontSize: 10, letterSpacing: "0.06em" }}>BREAKING</span>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase" }}>{top.src}</span>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>·</span>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>{fmtAge(top.ageSec)}</span>
+                    <span style={{ marginLeft: "auto" }} className="mono" >
+                      <span style={{ fontSize: 10, color: "var(--accent)", border: "1px solid var(--accent)", padding: "2px 8px", borderRadius: 4, fontFamily: "var(--f-mono)" }}>{top.tag}</span>
+                    </span>
+                  </div>
+                  <div className="display" style={{ fontSize: 28, lineHeight: 1.15, letterSpacing: "-0.02em", marginBottom: 14, color: "var(--ink)" }}>
+                    {top.head}
+                  </div>
+                  <div style={{ display: "flex", gap: 18, fontFamily: "var(--f-mono)", fontSize: 11, color: "var(--muted)" }}>
+                    <span><span style={{ color: "var(--accent)" }}>●</span>&nbsp;&nbsp;{top.co.toUpperCase()}</span>
+                    <span>SECTOR · {top.sector.toUpperCase()}</span>
+                    <span>SOURCE-LINKED · TRACEABLE</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Ticker list */}
+              <div>
+                {filtered.slice(1, 6).map((it, i) => (
+                  <div key={`${it.idx}-${tick}-${i}`} style={{
+                    display: "grid", gridTemplateColumns: "70px 1fr 90px",
+                    gap: 14, alignItems: "baseline",
+                    padding: "14px 24px",
+                    borderBottom: i === 4 ? "none" : "1px solid var(--rule)",
+                  }}>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>{fmtAge(it.ageSec)}</span>
+                    <div>
+                      <span className="mono" style={{ fontSize: 11, color: "var(--accent)", marginRight: 10, textTransform: "uppercase" }}>{it.co}</span>
+                      <span style={{ fontSize: 14, color: "var(--ink)", lineHeight: 1.45 }}>{it.head}</span>
+                    </div>
+                    <span className="mono" style={{ fontSize: 10, color: "var(--muted)", textAlign: "right", textTransform: "uppercase" }}>{it.src}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right: routing panel */}
+            <div style={{ padding: "22px 22px 22px", display: "grid", gap: 18, alignContent: "start" }}>
+              <div>
+                <div className="mono" style={{ fontSize: 10, color: "var(--muted)", marginBottom: 10 }}>ROUTED TO</div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {[
+                    { who: "Banking desk",  what: "HDFC Bank · Q4 results note", at: "auto · 14s" },
+                    { who: "Sector tracker", what: "Tech · guidance band update", at: "auto · 38s" },
+                    { who: "Energy lead",   what: "Reliance · capex memo draft", at: "auto · 1m" },
+                  ].map((r, i) => (
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, padding: "10px 12px", border: "1px solid var(--rule)", borderRadius: 8, background: "var(--ivory)" }}>
+                      <div>
+                        <div className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>{r.who.toUpperCase()}</div>
+                        <div style={{ fontSize: 13, color: "var(--ink)", marginTop: 2 }}>{r.what}</div>
+                      </div>
+                      <div className="mono" style={{ fontSize: 10, color: "var(--green)", alignSelf: "center" }}>✓ {r.at}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="mono" style={{ fontSize: 10, color: "var(--muted)", marginBottom: 10 }}>VOLUME · LAST 60 MIN</div>
+                <NewsSparkline tick={tick}/>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontFamily: "var(--f-mono)", fontSize: 10, color: "var(--muted)" }}>
+                  <span>−60m</span><span>−45m</span><span>−30m</span><span>−15m</span><span>now</span>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div style={{ padding: "12px", border: "1px solid var(--rule)", borderRadius: 8 }}>
+                  <div className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>HEADLINES TODAY</div>
+                  <div className="display" style={{ fontSize: 26, marginTop: 4, letterSpacing: "-0.02em" }}>2,418</div>
+                </div>
+                <div style={{ padding: "12px", border: "1px solid var(--rule)", borderRadius: 8 }}>
+                  <div className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>MEDIAN LATENCY</div>
+                  <div className="display" style={{ fontSize: 26, marginTop: 4, letterSpacing: "-0.02em" }}>4.2s</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom marquee */}
+          <div style={{ borderTop: "1px solid var(--rule)", background: "var(--ink)", color: "var(--ivory)", overflow: "hidden", whiteSpace: "nowrap" }}>
+            <div style={{ display: "inline-block", padding: "10px 0", animation: "marquee 60s linear infinite", fontFamily: "var(--f-mono)", fontSize: 12 }}>
+              {[...SEED, ...SEED].map((it, i) => (
+                <span key={i} style={{ marginRight: 36 }}>
+                  <span style={{ color: "var(--accent)" }}>●</span>&nbsp;&nbsp;
+                  <span style={{ color: "var(--muted-2)" }}>{it.src.toUpperCase()}</span>
+                  &nbsp;&nbsp;{it.co} — {it.head}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 20, fontFamily: "var(--f-mono)", fontSize: 11, color: "var(--muted)", display: "flex", gap: 24, flexWrap: "wrap" }}>
+          <span>Demo feed shown for illustration. PRISM connects to licensed wires and exchange APIs in production.</span>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes pulseDot { 0% { box-shadow: 0 0 0 0 var(--green); } 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+        @keyframes newsIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+      `}</style>
+    </section>
+  );
+}
+
+function NewsSparkline({ tick }) {
+  const N = 40;
+  const vals = React.useMemo(() => {
+    const out = [];
+    let r = 1234 + tick;
+    for (let i = 0; i < N; i++) {
+      r = (r * 9301 + 49297) % 233280;
+      const base = 0.4 + 0.5 * Math.sin(i / 4);
+      out.push(Math.max(0.1, base + (r / 233280 - 0.5) * 0.5));
+    }
+    return out;
+  }, [tick]);
+  const W = 280, H = 60, gap = 2;
+  const bw = (W - gap * (N - 1)) / N;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 60, display: "block" }}>
+      {vals.map((v, i) => {
+        const h = v * (H - 4);
+        const isLast = i === N - 1;
+        return <rect key={i} x={i * (bw + gap)} y={H - h - 2} width={bw} height={h} rx="1" fill={isLast ? "var(--accent)" : "var(--ink)"} opacity={isLast ? 1 : 0.25 + (i / N) * 0.55}/>;
+      })}
+    </svg>
+  );
+}
+
+function App() { return <><Nav active="prism"/><PrismHero/><LiveNewsroom/><Capabilities/><Principles/><PrismCTA/><Footer/></>; }
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

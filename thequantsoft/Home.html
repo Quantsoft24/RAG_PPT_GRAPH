@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<script src="/config.js"></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Quantsoft — Quant & AI for India's next retail investor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/tokens.css"/>
+  <script src="/config.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="components/Nav.jsx"></script>
+  <script type="text/babel" src="components/Hero.jsx"></script>
+  <script type="text/babel" src="components/Research.jsx"></script>
+  <script type="text/babel" src="components/Sections.jsx"></script>
+
+  <script type="text/babel">
+    const { useEffect } = React;
+
+    function useReveal() {
+      useEffect(() => {
+        const els = document.querySelectorAll(".reveal");
+        const io = new IntersectionObserver((ents) => {
+          ents.forEach(e => { if (e.isIntersecting) e.target.classList.add("in"); });
+        }, { threshold: 0.15 });
+        els.forEach(el => io.observe(el));
+        return () => io.disconnect();
+      }, []);
+    }
+
+    function Tweaks() {
+      const [open, setOpen] = React.useState(false);
+      const [avail, setAvail] = React.useState(false);
+      React.useEffect(() => {
+        const h = (e) => {
+          if (e.data?.type === "__activate_edit_mode") { setAvail(true); setOpen(true); }
+          if (e.data?.type === "__deactivate_edit_mode") { setOpen(false); }
+        };
+        window.addEventListener("message", h);
+        window.parent.postMessage({ type: "__edit_mode_available" }, "*");
+        return () => window.removeEventListener("message", h);
+      }, []);
+      if (!open) return null;
+      const setVar = (k, v) => { document.documentElement.style.setProperty(k, v); };
+      return (
+        <div style={{
+          position: "fixed", right: 20, bottom: 20, zIndex: 100,
+          background: "var(--paper)", border: "1px solid var(--rule)", borderRadius: 14,
+          padding: 18, width: 260, boxShadow: "var(--shadow-lg)", fontSize: 13,
+        }}>
+          <div className="eyebrow" style={{ marginBottom: 12 }}>Tweaks</div>
+          <div style={{ display: "grid", gap: 10 }}>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>Accent</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["#E8511C","#1B2B6B","#1F7A4D","#8B5CF6","#D97706"].map(c => (
+                  <button key={c} onClick={() => setVar("--accent", c)} style={{ width: 26, height: 26, background: c, borderRadius: 6, border: "1px solid var(--rule)" }}/>
+                ))}
+              </div>
+            </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>Canvas</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[["Ivory","#F6F4EE","#FBFAF6"],["Paper","#FFFFFF","#FAFAF7"],["Stone","#EEEBE1","#F4F1E8"]].map(([n,a,b])=>(
+                  <button key={n} onClick={()=>{setVar("--ivory",a);setVar("--paper",b);}} style={{ flex:1, padding:"6px 0", fontSize:11, fontFamily:"var(--f-mono)", border:"1px solid var(--rule)", borderRadius:6, background: a }}>{n}</button>
+                ))}
+              </div>
+            </label>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      useReveal();
+      return (
+        <>
+          <Nav active="home"/>
+          <Hero/>
+          <Research/>
+          <PrismDemo/>
+          <WhyNow/>
+          <Team/>
+          <FutureDirections/>
+          <ManifestoCTA/>
+          <Contact/>
+          <Footer/>
+          <Tweaks/>
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+  </script>
+</body>
+</html>
