@@ -1,0 +1,19 @@
+# ─── Quantsoft Landing Page ───
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files and install
+COPY thequantsoft/package.json thequantsoft/package-lock.json ./
+RUN npm ci --production
+
+# Copy application code
+COPY thequantsoft/ ./
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD wget -q --spider http://localhost:3002/ || exit 1
+
+EXPOSE 3002
+
+CMD ["node", "server.js"]

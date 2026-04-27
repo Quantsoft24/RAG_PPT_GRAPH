@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<script src="/config.js"></script>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Terms — Quantsoft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles/tokens.css"/>
+  <script src="/config.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="components/Nav.jsx"></script>
+
+<script type="text/babel">
+const sections = [
+  {n:"01", t:"Nature of Service", body:[
+    "Quantsoft provides quantitative research tools, analytics, backtesting and infrastructure for market analysis.",
+    "We are not a broker, portfolio manager, or SEBI-registered investment advisor.",
+    "All outputs are informational only and do not constitute investment advice or buy/sell recommendations. You are fully responsible for your trading decisions."
+  ]},
+  {n:"02", t:"Algo Trading & Broker Integration", body:[
+    "If you connect a broker account:",
+    "• Trades are executed by your broker, not Quantsoft.",
+    "• We never hold your funds or securities.",
+    "• Technical failures or downtime may occur.",
+    "• Past performance does not guarantee future results.",
+    "You accept full financial risk for all trades."
+  ]},
+  {n:"03", t:"Data & Backtesting", body:[
+    "Backtests and analytics are hypothetical and may differ from live market results due to slippage, liquidity and execution conditions."
+  ]},
+  {n:"04", t:"Acceptable Use", body:[
+    "You agree not to:",
+    "a) Copy or resell platform data or models.",
+    "b) Reverse engineer systems.",
+    "c) Use bots or scraping tools.",
+    "d) Use the platform for illegal or manipulative trading."
+  ]},
+  {n:"05", t:"Contact", body:[window.QS_CONFIG.EMAIL]},
+];
+
+function LegalPage({title, eyebrow, updated, sections}) {
+  return (
+    <section style={{padding:"100px 0 120px"}}>
+      <div className="container">
+        <div style={{display:"grid", gridTemplateColumns:"240px 1fr", gap:60, alignItems:"start"}}>
+          <aside style={{position:"sticky", top:100, alignSelf:"start"}}>
+            <span className="eyebrow" style={{borderTop:"1px solid var(--ink)", paddingTop:10, display:"inline-block"}}>{eyebrow}</span>
+            <div className="mono" style={{fontSize:11, color:"var(--muted)", marginTop:20, textTransform:"uppercase", letterSpacing:"0.08em"}}>Last updated</div>
+            <div style={{fontSize:14, marginTop:4}}>{updated}</div>
+            <div style={{marginTop:32, display:"grid", gap:10}}>
+              {sections.map(s=>(
+                <a key={s.n} href={`#s${s.n}`} className="mono" style={{fontSize:12, color:"var(--muted)", borderLeft:"2px solid var(--rule)", paddingLeft:12, padding:"4px 0 4px 12px"}}>
+                  {s.n} · {s.t}
+                </a>
+              ))}
+            </div>
+          </aside>
+          <div>
+            <h1 className="display" style={{fontSize:"clamp(44px, 5.5vw, 84px)", margin:"0 0 40px", letterSpacing:"-0.03em"}}>{title}</h1>
+            {sections.map((s,i)=>(
+              <div key={s.n} id={`s${s.n}`} style={{padding:"32px 0", borderTop: i===0 ? "1px solid var(--ink)" : "1px solid var(--rule)"}}>
+                <div style={{display:"grid", gridTemplateColumns:"80px 1fr", gap:20, alignItems:"baseline"}}>
+                  <div className="mono" style={{fontSize:12, color:"var(--accent)"}}>{s.n}</div>
+                  <div>
+                    <h2 className="display" style={{fontSize:30, margin:"0 0 16px", letterSpacing:"-0.01em"}}>{s.t}</h2>
+                    <div style={{display:"grid", gap:12, color:"var(--ink-2)", fontSize:16, lineHeight:1.65}}>
+                      {s.body.map((b,j)=><p key={j} style={{margin:0}}>{b}</p>)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div style={{borderTop:"1px solid var(--rule)", paddingTop:32, marginTop:32, color:"var(--muted)", fontSize:14}}>
+              By continuing to use the Platform, you agree to these terms. Questions? <a href="Contact.html" style={{color:"var(--accent)", textDecoration:"underline"}}>Contact us.</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function App() {
+  return <><Nav/><LegalPage title="Terms & Conditions." eyebrow="Legal · Terms" updated="2026-02-20" sections={sections}/><Footer/></>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
